@@ -111,12 +111,12 @@ function parseVersesFromHtml(chapterHtml: string): VerseLine[] {
     }
 
     let currentVerseNumber: number | null = null;
-    let buffer = "";
+    let displayHtml = "";
 
     const flush = (): void => {
-      const speechText = cleanForSpeech(buffer);
+      const speechText = cleanForSpeech(displayHtml);
       if (!speechText) {
-        buffer = "";
+        displayHtml = "";
         return;
       }
 
@@ -129,7 +129,7 @@ function parseVersesFromHtml(chapterHtml: string): VerseLine[] {
       }
 
       verses.push({ number: verseNumber, text: speechText });
-      buffer = "";
+      displayHtml = "";
     };
 
     for (const node of Array.from(paragraph.childNodes)) {
@@ -139,7 +139,7 @@ function parseVersesFromHtml(chapterHtml: string): VerseLine[] {
         if (tagName === "sup") {
           const numeric = Number((elementNode.textContent ?? "").replace(/\D+/g, ""));
           if (Number.isFinite(numeric) && numeric > 0) {
-            if (buffer.trim()) {
+            if (displayHtml.trim()) {
               flush();
             }
             currentVerseNumber = numeric;
@@ -148,10 +148,14 @@ function parseVersesFromHtml(chapterHtml: string): VerseLine[] {
         }
       }
 
-      buffer += node.textContent ?? "";
+      if (node.nodeType === Node.ELEMENT_NODE) {
+        displayHtml += (node as HTMLElement).outerHTML;
+      } else {
+        displayHtml += node.textContent ?? "";
+      }
     }
 
-    if (buffer.trim()) {
+    if (displayHtml.trim()) {
       flush();
     }
   }
@@ -182,7 +186,8 @@ function parseVersesFromPlainText(content: string): VerseLine[] {
       continue;
     }
 
-    const speechText = cleanForSpeech(matched[2]);
+    const displayHtml = matched[2];
+    const speechText = cleanForSpeech(displayHtml);
     if (!speechText) {
       continue;
     }
@@ -195,19 +200,20 @@ function parseVersesFromPlainText(content: string): VerseLine[] {
 
 function cleanForSpeech(html: string): string {
   return html
-    // Remove verse numbers in <sup>
+    // Remove verse numbers in <sup> tags
     .replace(/<sup[^>]*>\d+<\/sup>/g, "")
-    // Remove all HTML tags
+    // Remove ALL HTML
     .replace(/<[^>]+>/g, "")
-    // Remove cross references like [Dan 12:1; Rev 3:5]
+    // Remove cross references like [Dan 12:1]
     .replace(/\[[^\]]*\d+:\d+[^\]]*\]/g, "")
-    // Remove standalone bracket verse markers like [4]
+    // Remove standalone bracket numbers like [4]
     .replace(/\[\d+\]/g, "")
-    // Remove leftover standalone verse numbers at start of line
-    .replace(/^\s*\d+\s+/gm, "")
-    // Normalize punctuation
-    .replace(/—/g, ", ")
-    .replace(/;/g, ", ")
+    // Remove verse numbers that appear at sentence boundaries
+    // Example: ". 4 Rejoice"
+    .replace(/(^|\.\s|\?\s|\!\s)\d+\s+/g, "$1")
+    // Remove numbers at start of string
+    .replace(/^\d+\s+/, "")
+    // Normalize whitespace
     .replace(/\s+/g, " ")
     .trim();
 }
