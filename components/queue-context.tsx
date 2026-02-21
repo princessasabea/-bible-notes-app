@@ -193,13 +193,19 @@ function parseVersesFromPlainText(content: string): VerseLine[] {
   return verses;
 }
 
-function cleanForSpeech(text: string): string {
-  return text
+function cleanForSpeech(html: string): string {
+  return html
+    // Remove verse numbers in <sup>
+    .replace(/<sup[^>]*>\d+<\/sup>/g, "")
+    // Remove all HTML tags
     .replace(/<[^>]+>/g, "")
-    .replace(/^\[\d+\]\s*/g, "")
-    .replace(/\[\d?[A-Z][a-zA-Z]+\s\d+:\d+(-\d+)?\]/g, "")
-    .replace(/\[[A-Z][a-zA-Z]+\s\d+:\d+(-\d+)?\]/g, "")
+    // Remove cross references like [Dan 12:1; Rev 3:5]
+    .replace(/\[[^\]]*\d+:\d+[^\]]*\]/g, "")
+    // Remove standalone bracket verse markers like [4]
     .replace(/\[\d+\]/g, "")
+    // Remove leftover standalone verse numbers at start of line
+    .replace(/^\s*\d+\s+/gm, "")
+    // Normalize punctuation
     .replace(/—/g, ", ")
     .replace(/;/g, ", ")
     .replace(/\s+/g, " ")
