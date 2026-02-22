@@ -199,15 +199,19 @@ function parseVersesFromPlainText(content: string): VerseLine[] {
 function cleanForSpeech(html: string): string {
   return html
     // Remove verse numbers in <sup> tags
-    .replace(/<sup[^>]*>\d+<\/sup>/g, "")
-    // Remove standalone verse numbers like [4]
-    .replace(/\[\d+\]/g, "")
+    .replace(/<sup[^>]*>\s*\d+\s*<\/sup>/gi, "")
+    // Remove cross references like [Dan 12:1; Rev 3:5]
+    .replace(/\[[^\]]*\d+:\d+[^\]]*\]/g, "")
+    // Remove bracket verse numbers like [4] and [10]
+    .replace(/\[\s*\d+\s*\]/g, "")
     // Remove all HTML tags
     .replace(/<[^>]+>/g, "")
-    // Remove numbers at start of lines
-    .replace(/(^|\n)\s*\d+\s+/g, "$1")
-    // Remove inline verse markers like ". 4 Rejoice" or " 4 Rejoice"
-    .replace(/(^|[.!?]\s+|\s)\d{1,3}(?=\s+[A-Z“"'(])/g, "$1")
+    // Remove leading verse numbers like "4 Rejoice..." at line/string start
+    .replace(/(^|\n)\s*\d{1,3}\s+(?=[A-Za-z“"'(])/g, "$1")
+    // Remove inline verse markers after sentence boundaries like ". 4 Rejoice..."
+    .replace(/([.!?]\s+)\d{1,3}\s+(?=[A-Za-z“"'(])/g, "$1")
+    // Remove any remaining standalone small numeric tokens likely to be verse markers
+    .replace(/\s\d{1,3}(?=\s+[A-Z“"'(])/g, " ")
     // Normalize whitespace
     .replace(/\s+/g, " ")
     .trim();
