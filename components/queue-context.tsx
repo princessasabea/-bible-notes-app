@@ -30,7 +30,7 @@ type VoiceFilter = "enhanced" | "premium";
 
 type VerseLine = {
   number: number;
-  text: string;
+  displayHtml: string;
 };
 
 type ChapterResponse =
@@ -114,8 +114,7 @@ function parseVersesFromHtml(chapterHtml: string): VerseLine[] {
     let displayHtml = "";
 
     const flush = (): void => {
-      const speechText = cleanForSpeech(displayHtml);
-      if (!speechText) {
+      if (!displayHtml.trim()) {
         displayHtml = "";
         return;
       }
@@ -128,7 +127,7 @@ function parseVersesFromHtml(chapterHtml: string): VerseLine[] {
         fallbackVerseNumber = verseNumber;
       }
 
-      verses.push({ number: verseNumber, text: speechText });
+      verses.push({ number: verseNumber, displayHtml });
       displayHtml = "";
     };
 
@@ -187,12 +186,11 @@ function parseVersesFromPlainText(content: string): VerseLine[] {
     }
 
     const displayHtml = matched[2];
-    const speechText = cleanForSpeech(displayHtml);
-    if (!speechText) {
+    if (!displayHtml.trim()) {
       continue;
     }
 
-    verses.push({ number, text: speechText });
+    verses.push({ number, displayHtml });
   }
 
   return verses;
@@ -202,17 +200,14 @@ function cleanForSpeech(html: string): string {
   return html
     // Remove verse numbers in <sup> tags
     .replace(/<sup[^>]*>\d+<\/sup>/g, "")
-    // Remove ALL HTML
-    .replace(/<[^>]+>/g, "")
-    // Remove cross references like [Dan 12:1]
-    .replace(/\[[^\]]*\d+:\d+[^\]]*\]/g, "")
-    // Remove standalone bracket numbers like [4]
+    // Remove standalone verse numbers like [4]
     .replace(/\[\d+\]/g, "")
-    // Remove verse numbers that appear at sentence boundaries
-    // Example: ". 4 Rejoice"
-    .replace(/(^|\.\s|\?\s|\!\s)\d+\s+/g, "$1")
-    // Remove numbers at start of string
-    .replace(/^\d+\s+/, "")
+    // Remove all HTML tags
+    .replace(/<[^>]+>/g, "")
+    // Remove numbers at start of lines
+    .replace(/(^|\n)\s*\d+\s+/g, "$1")
+    // Remove inline verse markers like ". 4 Rejoice" or " 4 Rejoice"
+    .replace(/(^|[.!?]\s+|\s)\d{1,3}(?=\s+[A-Z“"'(])/g, "$1")
     // Normalize whitespace
     .replace(/\s+/g, " ")
     .trim();
@@ -551,7 +546,17 @@ export function QueueProvider({ children }: { children: React.ReactNode }): Reac
       }
 
       const verse = verses[verseIndex];
-      const utterance = new SpeechSynthesisUtterance(verse.text);
+      const speechText = cleanForSpeech(verse.displayHtml);
+      console.log("TTS TEXT:", speechText);
+      if (!speechText) {
+        verseIndex += 1;
+        timerRef.current = window.setTimeout(() => {
+          timerRef.current = null;
+          speakNext();
+        }, 100);
+        return;
+      }
+      const utterance = new SpeechSynthesisUtterance(speechText);
       utterance.rate = verseIndex === verses.length - 1
         ? Math.max(0.85, speechRateRef.current - 0.05)
         : speechRateRef.current;
@@ -666,7 +671,17 @@ export function QueueProvider({ children }: { children: React.ReactNode }): Reac
       }
 
       const verse = verses[verseIndex];
-      const utterance = new SpeechSynthesisUtterance(verse.text);
+      const speechText = cleanForSpeech(verse.displayHtml);
+      console.log("TTS TEXT:", speechText);
+      if (!speechText) {
+        verseIndex += 1;
+        timerRef.current = window.setTimeout(() => {
+          timerRef.current = null;
+          speakNext();
+        }, 100);
+        return;
+      }
+      const utterance = new SpeechSynthesisUtterance(speechText);
       utterance.rate = verseIndex === verses.length - 1
         ? Math.max(0.85, speechRateRef.current - 0.05)
         : speechRateRef.current;
