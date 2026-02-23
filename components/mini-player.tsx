@@ -29,6 +29,8 @@ export function MiniPlayer(): React.ReactElement {
     statusMessage,
     playFromCurrent,
     playFromIndex,
+    playChapterNow,
+    playPlaylist,
     playNowViewing,
     playNext,
     playPrevious,
@@ -137,9 +139,11 @@ export function MiniPlayer(): React.ReactElement {
                   onClick={() => {
                     if (queue.length > 0) {
                       void playFromCurrent();
-                      return;
+                    } else if (nowViewingItem) {
+                      void playChapterNow(nowViewingItem);
+                    } else {
+                      void playNowViewing();
                     }
-                    void playNowViewing();
                   }}
                   disabled={queue.length === 0 && !nowViewingItem}
                 >
@@ -271,7 +275,6 @@ export function MiniPlayer(): React.ReactElement {
                         saveCurrentQueueAsPlaylist(playlistName);
                         setPlaylistName("");
                       }}
-                      disabled={queue.length === 0}
                     >
                       Save
                     </button>
@@ -328,7 +331,7 @@ export function MiniPlayer(): React.ReactElement {
                   if (!selectedPlaylist) {
                     return;
                   }
-                  loadPlaylistIntoQueue(selectedPlaylist.id);
+                  void playPlaylist(selectedPlaylist.id);
                   setPlaylistScreenOpen(false);
                 }}
               >
@@ -341,13 +344,7 @@ export function MiniPlayer(): React.ReactElement {
                   if (!selectedPlaylist) {
                     return;
                   }
-                  loadPlaylistIntoQueue(selectedPlaylist.id);
-                  const randomIndex = selectedPlaylist.chapters.length > 0
-                    ? Math.floor(Math.random() * selectedPlaylist.chapters.length)
-                    : 0;
-                  setTimeout(() => {
-                    void playFromIndex(randomIndex);
-                  }, 120);
+                  void playPlaylist(selectedPlaylist.id, { shuffle: true });
                   setPlaylistScreenOpen(false);
                 }}
               >
@@ -376,11 +373,8 @@ export function MiniPlayer(): React.ReactElement {
                 key={`${chapterItem.id}-${index}`}
                 className="playlist-track"
                 onClick={() => {
-                  loadPlaylistIntoQueue(selectedPlaylist.id);
+                  void playPlaylist(selectedPlaylist.id, { startIndex: index });
                   setPlaylistScreenOpen(false);
-                  setTimeout(() => {
-                    void playFromIndex(index);
-                  }, 120);
                 }}
               >
                 <span className="track-index">{index + 1}</span>

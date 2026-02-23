@@ -203,14 +203,7 @@ export function ReaderMode({
     if (!chapterHtml || loading || isPlaying) {
       return;
     }
-
-    if (queue.length === 0) {
-      void playNowViewing();
-      return;
-    }
-
-    const queueIndex = ensureCurrentChapterInQueue();
-    void playFromIndex(queueIndex);
+    void playNowViewing();
   };
 
   useEffect(() => {

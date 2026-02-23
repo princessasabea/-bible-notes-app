@@ -73,6 +73,8 @@ type QueueContextValue = {
   setNowViewingItem: (item: QueueItem | null) => void;
   playFromCurrent: () => Promise<void>;
   playFromIndex: (index: number) => Promise<void>;
+  playChapterNow: (item: QueueItem) => Promise<void>;
+  playPlaylist: (playlistId: string, options?: { shuffle?: boolean; startIndex?: number }) => Promise<void>;
   playNowViewing: () => Promise<void>;
   togglePause: () => void;
   stop: () => void;
@@ -81,8 +83,6 @@ type QueueContextValue = {
   deletePlaylist: (playlistId: string) => void;
 };
 
-const QUEUE_STORAGE_KEY = "fellowship.queue.v1";
-const QUEUE_INDEX_STORAGE_KEY = "fellowship.queue.index.v1";
 const PLAYLIST_STORAGE_KEY = "fellowship.playlists.v1";
 const VOICE_STORAGE_KEY = "fellowship.voice.name.v1";
 const VOICE_FILTER_STORAGE_KEY = "fellowship.voice.filter.v1";
@@ -345,22 +345,6 @@ export function QueueProvider({ children }: { children: React.ReactNode }): Reac
   useEffect(() => {
     const loadStored = (): void => {
       try {
-        const storedQueue = localStorage.getItem(QUEUE_STORAGE_KEY);
-        if (storedQueue) {
-          const parsed = JSON.parse(storedQueue) as QueueItem[];
-          if (Array.isArray(parsed)) {
-            setQueue(parsed);
-          }
-        }
-
-        const storedIndex = localStorage.getItem(QUEUE_INDEX_STORAGE_KEY);
-        if (storedIndex) {
-          const parsed = Number(storedIndex);
-          if (Number.isFinite(parsed) && parsed >= 0) {
-            setCurrentIndex(parsed);
-          }
-        }
-
         const storedPlaylists = localStorage.getItem(PLAYLIST_STORAGE_KEY);
         if (storedPlaylists) {
           const parsed = JSON.parse(storedPlaylists) as Playlist[];
@@ -406,14 +390,6 @@ export function QueueProvider({ children }: { children: React.ReactNode }): Reac
 
     loadStored();
   }, []);
-
-  useEffect(() => {
-    localStorage.setItem(QUEUE_STORAGE_KEY, JSON.stringify(queue));
-  }, [queue]);
-
-  useEffect(() => {
-    localStorage.setItem(QUEUE_INDEX_STORAGE_KEY, String(currentIndex));
-  }, [currentIndex]);
 
   useEffect(() => {
     localStorage.setItem(PLAYLIST_STORAGE_KEY, JSON.stringify(playlists));
@@ -507,6 +483,7 @@ export function QueueProvider({ children }: { children: React.ReactNode }): Reac
     const playSession = sessionRef.current;
     clearTimer();
     speechSynthesis.cancel();
+    speechSynthesis.resume();
 
     const item = activeQueue[index];
     setCurrentIndex(index);
@@ -635,11 +612,57 @@ export function QueueProvider({ children }: { children: React.ReactNode }): Reac
         setIsPaused(false);
       };
 
+      speechSynthesis.resume();
       speechSynthesis.speak(utterance);
     };
 
     speakNext();
   }, [clearTimer, fetchChapterVerses, resolveVoice, router]);
+
+  const playFromCurrent = useCallback(async (): Promise<void> => {
+    await playFromIndex(currentIndexRef.current);
+  }, [playFromIndex]);
+
+  const playChapterNow = useCallback(async (item: QueueItem): Promise<void> => {
+    queueRef.current = [item];
+    currentIndexRef.current = 0;
+    setQueue([item]);
+    setCurrentIndex(0);
+    await playFromIndex(0);
+  }, [playFromIndex]);
+
+  const playPlaylist = useCallback(async (
+    playlistId: string,
+    options?: { shuffle?: boolean; startIndex?: number }
+  ): Promise<void> => {
+    const selected = playlists.find((entry) => entry.id === playlistId);
+    if (!selected) {
+      return;
+    }
+
+    const base = [...selected.chapters];
+    if (base.length === 0) {
+      queueRef.current = [];
+      currentIndexRef.current = 0;
+      setQueue([]);
+      setCurrentIndex(0);
+      setStatusMessage(`Playlist "${selected.name}" is empty.`);
+      stop();
+      return;
+    }
+
+    const queueItems = options?.shuffle ? [...base].sort(() => Math.random() - 0.5) : base;
+    const maxIndex = queueItems.length - 1;
+    const startIndex = Number.isFinite(options?.startIndex)
+      ? Math.min(maxIndex, Math.max(0, options?.startIndex ?? 0))
+      : 0;
+
+    queueRef.current = queueItems;
+    currentIndexRef.current = startIndex;
+    setQueue(queueItems);
+    setCurrentIndex(startIndex);
+    await playFromIndex(startIndex);
+  }, [playFromIndex, playlists, stop]);
 
   const playNowViewing = useCallback(async (): Promise<void> => {
     if (!nowViewingItem) {
@@ -647,124 +670,8 @@ export function QueueProvider({ children }: { children: React.ReactNode }): Reac
       return;
     }
 
-    sessionRef.current += 1;
-    const playSession = sessionRef.current;
-    clearTimer();
-    speechSynthesis.cancel();
-
-    setCurrentChapterTitle(nowViewingItem.title);
-    setIsPlaying(true);
-    setIsPaused(false);
-    setCurrentVerse(null);
-    setStatusMessage(null);
-    router.push(makeReaderPath(nowViewingItem) as never);
-
-    let verses: VerseLine[] = [];
-    try {
-      verses = await fetchChapterVerses(nowViewingItem);
-    } catch (error) {
-      if (playSession !== sessionRef.current) {
-        return;
-      }
-
-      console.error("standalone_chapter_load_failed", error);
-      setStatusMessage(error instanceof Error ? error.message : "Unable to load chapter.");
-      setIsPlaying(false);
-      setIsPaused(false);
-      return;
-    }
-
-    if (playSession !== sessionRef.current) {
-      return;
-    }
-
-    if (verses.length === 0) {
-      setIsPlaying(false);
-      setIsPaused(false);
-      return;
-    }
-
-    const selectedVoice = resolveVoice();
-    let verseIndex = 0;
-
-    const speakNext = (): void => {
-      if (playSession !== sessionRef.current) {
-        return;
-      }
-
-      if (verseIndex >= verses.length) {
-        setCurrentVerse(null);
-        setIsPlaying(false);
-        setIsPaused(false);
-        return;
-      }
-
-      const verse = verses[verseIndex];
-      const speechText = cleanForSpeech(verse.displayHtml, verse.number);
-      console.log("TTS TEXT:", speechText);
-      if (!speechText) {
-        verseIndex += 1;
-        timerRef.current = window.setTimeout(() => {
-          timerRef.current = null;
-          speakNext();
-        }, 100);
-        return;
-      }
-      const utterance = new SpeechSynthesisUtterance(speechText);
-      utterance.rate = verseIndex === verses.length - 1
-        ? Math.max(0.85, speechRateRef.current - 0.05)
-        : speechRateRef.current;
-      utterance.pitch = 1;
-      utterance.lang = selectedVoice?.lang ?? "en-US";
-      if (selectedVoice) {
-        utterance.voice = selectedVoice;
-      }
-
-      utterance.onstart = () => {
-        if (playSession !== sessionRef.current) {
-          return;
-        }
-        setCurrentVerse(verse.number);
-      };
-
-      const queueContinuation = (): void => {
-        if (playSession !== sessionRef.current) {
-          return;
-        }
-
-        verseIndex += 1;
-        timerRef.current = window.setTimeout(() => {
-          timerRef.current = null;
-          speakNext();
-        }, 100);
-      };
-
-      utterance.onend = queueContinuation;
-      utterance.onerror = () => {
-        queueContinuation();
-      };
-      utterance.onpause = () => {
-        if (playSession !== sessionRef.current) {
-          return;
-        }
-        setIsPaused(true);
-      };
-      utterance.onresume = () => {
-        if (playSession !== sessionRef.current) {
-          return;
-        }
-        setIsPaused(false);
-      };
-
-      speechSynthesis.speak(utterance);
-    };
-
-    speakNext();
-  }, [clearTimer, fetchChapterVerses, nowViewingItem, resolveVoice, router]);
-
-  const playFromCurrent = useCallback(async (): Promise<void> => {
-    await playFromIndex(currentIndexRef.current);
-  }, [playFromIndex]);
+    await playChapterNow(nowViewingItem);
+  }, [nowViewingItem, playChapterNow]);
 
   const playNext = useCallback((): void => {
     const nextIndex = currentIndexRef.current + 1;
@@ -893,7 +800,7 @@ export function QueueProvider({ children }: { children: React.ReactNode }): Reac
 
   const saveCurrentQueueAsPlaylist = useCallback((name: string): void => {
     const trimmed = name.trim();
-    if (!trimmed || queueRef.current.length === 0) {
+    if (!trimmed) {
       return;
     }
 
@@ -960,6 +867,8 @@ export function QueueProvider({ children }: { children: React.ReactNode }): Reac
       setNowViewingItem,
       playFromCurrent,
       playFromIndex,
+      playChapterNow,
+      playPlaylist,
       playNowViewing,
       togglePause,
       stop,
@@ -994,6 +903,8 @@ export function QueueProvider({ children }: { children: React.ReactNode }): Reac
     setCurrentIndex,
     playFromCurrent,
     playFromIndex,
+    playChapterNow,
+    playPlaylist,
     playNowViewing,
     togglePause,
     stop,

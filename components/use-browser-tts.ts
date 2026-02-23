@@ -132,6 +132,7 @@ export function useBrowserTTS(): {
       };
 
       utteranceRef.current = utterance;
+      speechSynthesis.resume();
       speechSynthesis.speak(utterance);
     };
 
