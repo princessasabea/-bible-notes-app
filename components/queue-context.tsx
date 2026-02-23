@@ -196,8 +196,8 @@ function parseVersesFromPlainText(content: string): VerseLine[] {
   return verses;
 }
 
-function cleanForSpeech(html: string): string {
-  return html
+function cleanForSpeech(html: string, verseNumber?: number): string {
+  let cleaned = html
     // Remove verse numbers in <sup> tags
     .replace(/<sup[^>]*>\s*\d+\s*<\/sup>/gi, "")
     // Remove cross references like [Dan 12:1; Rev 3:5]
@@ -206,15 +206,34 @@ function cleanForSpeech(html: string): string {
     .replace(/\[\s*\d+\s*\]/g, "")
     // Remove all HTML tags
     .replace(/<[^>]+>/g, "")
+    // Remove unicode superscript digits that survive HTML stripping
+    .replace(/[⁰¹²³⁴⁵⁶⁷⁸⁹]+/g, "")
+    // Remove verse markers glued to words like "1Are" / "12Then"
+    .replace(/(^|[\s.!?;:([“"'—-])\d{1,3}(?=[A-Z])/g, "$1")
     // Remove leading verse numbers like "4 Rejoice..." at line/string start
-    .replace(/(^|\n)\s*\d{1,3}\s+(?=[A-Za-z“"'(])/g, "$1")
+    .replace(/(^|\n)\s*\d{1,3}[)\].-]?\s+(?=[A-Za-z“"'(])/g, "$1")
     // Remove inline verse markers after sentence boundaries like ". 4 Rejoice..."
-    .replace(/([.!?]\s+)\d{1,3}\s+(?=[A-Za-z“"'(])/g, "$1")
-    // Remove any remaining standalone small numeric tokens likely to be verse markers
-    .replace(/\s\d{1,3}(?=\s+[A-Z“"'(])/g, " ")
+    .replace(/([.!?]\s+)\d{1,3}[)\].-]?\s+(?=[A-Za-z“"'(])/g, "$1")
+    // Remove inline verse markers after commas/colons/semicolons
+    .replace(/([,;:]\s+)\d{1,3}[)\].-]?\s+(?=[A-Za-z“"'(])/g, "$1")
+    // Remove verse markers immediately after opening quote/paren
+    .replace(/([“"'(])\d{1,3}[)\].-]?\s+(?=[A-Za-z])/g, "$1")
+    // Remove markers like "4) Rejoice" or "4. Rejoice"
+    .replace(/(^|\s)\d{1,3}[)\].-]\s+(?=[A-Za-z])/g, "$1")
     // Normalize whitespace
     .replace(/\s+/g, " ")
     .trim();
+
+  // Explicitly strip this verse's own numeric marker if it still leaked through.
+  if (typeof verseNumber === "number" && Number.isFinite(verseNumber)) {
+    const marker = String(verseNumber).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    cleaned = cleaned
+      .replace(new RegExp(`(^|\\n)\\s*${marker}[)\\].-]?\\s+`, "g"), "$1")
+      .replace(new RegExp(`([.!?;:,]\\s+)${marker}[)\\].-]?\\s+`, "g"), "$1")
+      .replace(new RegExp(`([“\"'(])${marker}[)\\].-]?\\s+`, "g"), "$1");
+  }
+
+  return cleaned.replace(/\s+/g, " ").trim();
 }
 
 function makeReaderPath(item: QueueItem): string {
@@ -550,7 +569,7 @@ export function QueueProvider({ children }: { children: React.ReactNode }): Reac
       }
 
       const verse = verses[verseIndex];
-      const speechText = cleanForSpeech(verse.displayHtml);
+      const speechText = cleanForSpeech(verse.displayHtml, verse.number);
       console.log("TTS TEXT:", speechText);
       if (!speechText) {
         verseIndex += 1;
@@ -675,7 +694,7 @@ export function QueueProvider({ children }: { children: React.ReactNode }): Reac
       }
 
       const verse = verses[verseIndex];
-      const speechText = cleanForSpeech(verse.displayHtml);
+      const speechText = cleanForSpeech(verse.displayHtml, verse.number);
       console.log("TTS TEXT:", speechText);
       if (!speechText) {
         verseIndex += 1;
