@@ -208,8 +208,12 @@ function cleanForSpeech(html: string, verseNumber?: number): string {
     .replace(/<[^>]+>/g, "")
     // Remove unicode superscript digits that survive HTML stripping
     .replace(/[⁰¹²³⁴⁵⁶⁷⁸⁹]+/g, "")
+    // Remove verse numbers attached to words like 2who / 3you / 4Rejoice
+    .replace(/\b\d+(?=[A-Za-z])/g, "")
     // Remove verse markers glued to words like "1Are" / "12Then"
     .replace(/(^|[\s.!?;:([“"'—-])\d{1,3}(?=[A-Z])/g, "$1")
+    // Remove leading verse numbers like "4 Rejoice"
+    .replace(/^\d+\s+/gm, "")
     // Remove leading verse numbers like "4 Rejoice..." at line/string start
     .replace(/(^|\n)\s*\d{1,3}[)\].-]?\s+(?=[A-Za-z“"'(])/g, "$1")
     // Remove inline verse markers after sentence boundaries like ". 4 Rejoice..."
@@ -220,6 +224,8 @@ function cleanForSpeech(html: string, verseNumber?: number): string {
     .replace(/([“"'(])\d{1,3}[)\].-]?\s+(?=[A-Za-z])/g, "$1")
     // Remove markers like "4) Rejoice" or "4. Rejoice"
     .replace(/(^|\s)\d{1,3}[)\].-]\s+(?=[A-Za-z])/g, "$1")
+    // Remove leftover brackets while keeping bracketed words
+    .replace(/[\[\]]/g, "")
     // Normalize whitespace
     .replace(/\s+/g, " ")
     .trim();
