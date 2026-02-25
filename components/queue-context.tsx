@@ -27,6 +27,7 @@ type Playlist = {
 };
 
 type VoiceFilter = "enhanced" | "premium";
+type TtsEngine = "browser" | "openai";
 
 type VerseLine = {
   number: number;
@@ -52,6 +53,7 @@ type QueueContextValue = {
   selectedVoiceName: string;
   showAllVoices: boolean;
   voiceFilter: VoiceFilter;
+  ttsEngine: TtsEngine;
   playlists: Playlist[];
   drawerOpen: boolean;
   playlistModalOpen: boolean;
@@ -68,6 +70,7 @@ type QueueContextValue = {
   setSelectedVoiceName: (voiceName: string) => void;
   setShowAllVoices: (show: boolean) => void;
   setVoiceFilter: (filter: VoiceFilter) => void;
+  setTtsEngine: (engine: TtsEngine) => void;
   setSpeechRate: (rate: number) => void;
   setCrossfadeDurationMs: (ms: number) => void;
   setNowViewingItem: (item: QueueItem | null) => void;
@@ -92,6 +95,7 @@ const VOICE_FILTER_STORAGE_KEY = "fellowship.voice.filter.v1";
 const VOICE_SHOW_ALL_STORAGE_KEY = "fellowship.voice.showall.v1";
 const RATE_STORAGE_KEY = "fellowship.voice.rate.v1";
 const CROSSFADE_STORAGE_KEY = "fellowship.crossfade.ms.v1";
+const TTS_ENGINE_STORAGE_KEY = "fellowship.tts.engine.v1";
 
 const QueueContext = createContext<QueueContextValue | null>(null);
 
@@ -310,6 +314,7 @@ export function QueueProvider({ children }: { children: React.ReactNode }): Reac
   const [selectedVoiceName, setSelectedVoiceNameState] = useState("");
   const [showAllVoices, setShowAllVoicesState] = useState(false);
   const [voiceFilter, setVoiceFilterState] = useState<VoiceFilter>("enhanced");
+  const [ttsEngine, setTtsEngineState] = useState<TtsEngine>("browser");
   const [speechRate, setSpeechRateState] = useState(0.95);
   const [crossfadeDurationMs, setCrossfadeDurationMsState] = useState(400);
   const [playlists, setPlaylists] = useState<Playlist[]>([]);
@@ -319,9 +324,14 @@ export function QueueProvider({ children }: { children: React.ReactNode }): Reac
 
   const queueRef = useRef<QueueItem[]>([]);
   const currentIndexRef = useRef(0);
+  const currentVerseRef = useRef<number | null>(null);
+  const isPlayingRef = useRef(false);
   const speechRateRef = useRef(0.95);
   const crossfadeMsRef = useRef(400);
   const selectedVoiceRef = useRef("");
+  const ttsEngineRef = useRef<TtsEngine>("browser");
+  const activeAudioRef = useRef<HTMLAudioElement | null>(null);
+  const fetchAbortRef = useRef<AbortController | null>(null);
   const sessionRef = useRef(0);
   const timerRef = useRef<number | null>(null);
 
@@ -332,6 +342,14 @@ export function QueueProvider({ children }: { children: React.ReactNode }): Reac
   useEffect(() => {
     currentIndexRef.current = currentIndex;
   }, [currentIndex]);
+
+  useEffect(() => {
+    currentVerseRef.current = currentVerse;
+  }, [currentVerse]);
+
+  useEffect(() => {
+    isPlayingRef.current = isPlaying;
+  }, [isPlaying]);
 
   useEffect(() => {
     speechRateRef.current = speechRate;
@@ -345,6 +363,10 @@ export function QueueProvider({ children }: { children: React.ReactNode }): Reac
     selectedVoiceRef.current = selectedVoiceName;
   }, [selectedVoiceName]);
 
+  useEffect(() => {
+    ttsEngineRef.current = ttsEngine;
+  }, [ttsEngine]);
+
   const clearTimer = useCallback((): void => {
     if (timerRef.current !== null) {
       window.clearTimeout(timerRef.current);
@@ -352,14 +374,28 @@ export function QueueProvider({ children }: { children: React.ReactNode }): Reac
     }
   }, []);
 
+  const stopActiveAudio = useCallback((): void => {
+    if (fetchAbortRef.current) {
+      fetchAbortRef.current.abort();
+      fetchAbortRef.current = null;
+    }
+
+    if (activeAudioRef.current) {
+      activeAudioRef.current.pause();
+      activeAudioRef.current.src = "";
+      activeAudioRef.current = null;
+    }
+  }, []);
+
   const stop = useCallback((): void => {
     sessionRef.current += 1;
     clearTimer();
+    stopActiveAudio();
     speechSynthesis.cancel();
     setIsPlaying(false);
     setIsPaused(false);
     setCurrentVerse(null);
-  }, [clearTimer]);
+  }, [clearTimer, stopActiveAudio]);
 
   useEffect(() => {
     const loadStored = (): void => {
@@ -379,10 +415,15 @@ export function QueueProvider({ children }: { children: React.ReactNode }): Reac
           setShowAllVoicesState(true);
         }
 
+        const savedEngine = localStorage.getItem(TTS_ENGINE_STORAGE_KEY);
+        if (savedEngine === "browser" || savedEngine === "openai") {
+          setTtsEngineState(savedEngine);
+        }
+
         const savedRate = localStorage.getItem(RATE_STORAGE_KEY);
         if (savedRate) {
           const parsed = Number(savedRate);
-          if (Number.isFinite(parsed) && parsed >= 0.85 && parsed <= 1.2) {
+          if (Number.isFinite(parsed) && parsed >= 0.75 && parsed <= 1.5) {
             setSpeechRateState(parsed);
           }
         }
@@ -415,6 +456,10 @@ export function QueueProvider({ children }: { children: React.ReactNode }): Reac
   }, [showAllVoices]);
 
   useEffect(() => {
+    localStorage.setItem(TTS_ENGINE_STORAGE_KEY, ttsEngine);
+  }, [ttsEngine]);
+
+  useEffect(() => {
     localStorage.setItem(RATE_STORAGE_KEY, String(speechRate));
   }, [speechRate]);
 
@@ -438,9 +483,10 @@ export function QueueProvider({ children }: { children: React.ReactNode }): Reac
   useEffect(() => {
     return () => {
       clearTimer();
+      stopActiveAudio();
       speechSynthesis.cancel();
     };
-  }, [clearTimer]);
+  }, [clearTimer, stopActiveAudio]);
 
   const resolveVoice = useCallback((): SpeechSynthesisVoice | null => {
     const availableVoices = speechSynthesis.getVoices();
@@ -456,6 +502,10 @@ export function QueueProvider({ children }: { children: React.ReactNode }): Reac
   }, []);
 
   const primeSpeechFromUserGesture = useCallback((): void => {
+    if (ttsEngineRef.current !== "browser") {
+      return;
+    }
+
     try {
       const voices = speechSynthesis.getVoices();
       const iosVoice = voices.find((voice) => /samantha|daniel|siri/i.test(voice.name));
@@ -637,7 +687,7 @@ export function QueueProvider({ children }: { children: React.ReactNode }): Reac
     return parseVersesFromPlainText(payload.text);
   }, []);
 
-  const playFromIndex = useCallback(async (index: number): Promise<void> => {
+  const playFromIndex = useCallback(async (index: number, startAtVerse?: number): Promise<void> => {
     const activeQueue = queueRef.current;
     if (activeQueue.length === 0 || index < 0 || index >= activeQueue.length) {
       setStatusMessage("Queue is empty.");
@@ -647,8 +697,11 @@ export function QueueProvider({ children }: { children: React.ReactNode }): Reac
     sessionRef.current += 1;
     const playSession = sessionRef.current;
     clearTimer();
+    stopActiveAudio();
     speechSynthesis.cancel();
-    speechSynthesis.resume();
+    if (ttsEngineRef.current === "browser") {
+      speechSynthesis.resume();
+    }
 
     const item = activeQueue[index];
     setCurrentIndex(index);
@@ -695,6 +748,28 @@ export function QueueProvider({ children }: { children: React.ReactNode }): Reac
 
     const selectedVoice = resolveVoice();
     let verseIndex = 0;
+    if (typeof startAtVerse === "number" && Number.isFinite(startAtVerse)) {
+      const matchedIndex = verses.findIndex((entry) => entry.number === startAtVerse);
+      if (matchedIndex >= 0) {
+        verseIndex = matchedIndex;
+      }
+    }
+
+    const continueQueue = (): void => {
+      if (playSession !== sessionRef.current) {
+        return;
+      }
+
+      verseIndex += 1;
+      const delay = verseIndex >= verses.length
+        ? Math.max(100, crossfadeMsRef.current)
+        : 100;
+
+      timerRef.current = window.setTimeout(() => {
+        timerRef.current = null;
+        speakNext();
+      }, delay);
+    };
 
     const speakNext = (): void => {
       if (playSession !== sessionRef.current) {
@@ -720,16 +795,118 @@ export function QueueProvider({ children }: { children: React.ReactNode }): Reac
       const speechText = cleanForSpeech(verse.displayHtml, verse.number);
       console.log("TTS TEXT:", speechText);
       if (!speechText) {
-        verseIndex += 1;
-        timerRef.current = window.setTimeout(() => {
-          timerRef.current = null;
-          speakNext();
-        }, 100);
+        continueQueue();
         return;
       }
+
+      if (ttsEngineRef.current === "openai") {
+        setCurrentVerse(verse.number);
+        setIsPaused(false);
+
+        void (async () => {
+          try {
+            const controller = new AbortController();
+            fetchAbortRef.current = controller;
+
+            const response = await fetch("/api/tts/verse", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              signal: controller.signal,
+              body: JSON.stringify({
+                text: speechText,
+                translation: item.translation,
+                voiceProfile: "cedar",
+                voiceSettingsVersion: "v1",
+                modelVersion: "gpt-4o-mini-tts"
+              })
+            });
+
+            if (playSession !== sessionRef.current) {
+              return;
+            }
+
+            if (!response.ok) {
+              let errorMessage = `openai_tts_failed_${response.status}`;
+              try {
+                const payload = (await response.json()) as { error?: string; debug?: string };
+                if (process.env.NODE_ENV === "development" && payload.debug) {
+                  errorMessage = payload.debug;
+                } else if (payload.error) {
+                  errorMessage = payload.error;
+                }
+              } catch {
+                // no-op
+              }
+              setStatusMessage(errorMessage);
+              setIsPlaying(false);
+              setIsPaused(false);
+              return;
+            }
+
+            const payload = (await response.json()) as { redirectUrl?: string };
+            if (!payload.redirectUrl) {
+              setStatusMessage("Missing audio URL from AI voice.");
+              setIsPlaying(false);
+              setIsPaused(false);
+              return;
+            }
+
+            const audio = new Audio(payload.redirectUrl);
+            activeAudioRef.current = audio;
+            fetchAbortRef.current = null;
+            audio.playbackRate = speechRateRef.current;
+            audio.preload = "auto";
+
+            audio.onplay = () => {
+              if (playSession !== sessionRef.current) {
+                return;
+              }
+              setIsPaused(false);
+            };
+            audio.onpause = () => {
+              if (playSession !== sessionRef.current) {
+                return;
+              }
+              if (!audio.ended) {
+                setIsPaused(true);
+              }
+            };
+            audio.onended = () => {
+              if (playSession !== sessionRef.current) {
+                return;
+              }
+              activeAudioRef.current = null;
+              continueQueue();
+            };
+            audio.onerror = () => {
+              if (playSession !== sessionRef.current) {
+                return;
+              }
+              activeAudioRef.current = null;
+              continueQueue();
+            };
+
+            await audio.play();
+          } catch (error) {
+            if (playSession !== sessionRef.current) {
+              return;
+            }
+
+            if (error instanceof DOMException && error.name === "AbortError") {
+              return;
+            }
+            console.error("openai_tts_playback_failed", error);
+            setStatusMessage(error instanceof Error ? error.message : "AI voice playback failed.");
+            setIsPlaying(false);
+            setIsPaused(false);
+          }
+        })();
+        return;
+      }
+
       const utterance = new SpeechSynthesisUtterance(speechText);
       utterance.rate = verseIndex === verses.length - 1
-        ? Math.max(0.85, speechRateRef.current - 0.05)
+        ? Math.max(0.75, speechRateRef.current - 0.05)
         : speechRateRef.current;
       utterance.pitch = 1;
       utterance.lang = selectedVoice?.lang ?? "en-US";
@@ -743,27 +920,8 @@ export function QueueProvider({ children }: { children: React.ReactNode }): Reac
         }
         setCurrentVerse(verse.number);
       };
-
-      const queueContinuation = (): void => {
-        if (playSession !== sessionRef.current) {
-          return;
-        }
-
-        verseIndex += 1;
-        const delay = verseIndex >= verses.length
-          ? Math.max(100, crossfadeMsRef.current)
-          : 100;
-
-        timerRef.current = window.setTimeout(() => {
-          timerRef.current = null;
-          speakNext();
-        }, delay);
-      };
-
-      utterance.onend = queueContinuation;
-      utterance.onerror = () => {
-        queueContinuation();
-      };
+      utterance.onend = continueQueue;
+      utterance.onerror = continueQueue;
       utterance.onpause = () => {
         if (playSession !== sessionRef.current) {
           return;
@@ -782,7 +940,7 @@ export function QueueProvider({ children }: { children: React.ReactNode }): Reac
     };
 
     speakNext();
-  }, [clearTimer, fetchChapterVerses, resolveVoice, router]);
+  }, [clearTimer, fetchChapterVerses, resolveVoice, router, stopActiveAudio]);
 
   const playFromCurrent = useCallback(async (): Promise<void> => {
     await playFromIndex(currentIndexRef.current);
@@ -858,6 +1016,23 @@ export function QueueProvider({ children }: { children: React.ReactNode }): Reac
 
   const togglePause = useCallback((): void => {
     if (!isPlaying) {
+      return;
+    }
+
+    if (ttsEngineRef.current === "openai") {
+      const activeAudio = activeAudioRef.current;
+      if (!activeAudio) {
+        return;
+      }
+
+      if (isPaused) {
+        void activeAudio.play();
+        setIsPaused(false);
+        return;
+      }
+
+      activeAudio.pause();
+      setIsPaused(true);
       return;
     }
 
@@ -953,10 +1128,53 @@ export function QueueProvider({ children }: { children: React.ReactNode }): Reac
     setVoiceFilterState(filter);
   }, []);
 
+  const setTtsEngine = useCallback((engine: TtsEngine): void => {
+    if (engine === ttsEngineRef.current) {
+      return;
+    }
+
+    clearTimer();
+    stopActiveAudio();
+    speechSynthesis.cancel();
+    setIsPlaying(false);
+    setIsPaused(false);
+    setCurrentVerse(null);
+    setTtsEngineState(engine);
+    setStatusMessage(engine === "openai" ? "AI Voice selected." : "Device Voice selected.");
+  }, [clearTimer, stopActiveAudio]);
+
   const setSpeechRate = useCallback((rate: number): void => {
-    const clamped = Math.min(1.2, Math.max(0.85, rate));
-    setSpeechRateState(Number(clamped.toFixed(2)));
-  }, []);
+    const clamped = Math.min(1.5, Math.max(0.75, rate));
+    const rounded = Number(clamped.toFixed(2));
+    if (rounded === speechRateRef.current) {
+      return;
+    }
+
+    setSpeechRateState(rounded);
+
+    if (!isPlayingRef.current) {
+      return;
+    }
+
+    const activeIndex = currentIndexRef.current;
+    if (activeIndex < 0 || activeIndex >= queueRef.current.length) {
+      return;
+    }
+
+    if (ttsEngineRef.current === "openai") {
+      if (activeAudioRef.current) {
+        activeAudioRef.current.playbackRate = rounded;
+      }
+      return;
+    }
+
+    const activeVerse = currentVerseRef.current;
+    clearTimer();
+    stopActiveAudio();
+    speechSynthesis.cancel();
+    speechSynthesis.resume();
+    void playFromIndex(activeIndex, typeof activeVerse === "number" ? activeVerse : undefined);
+  }, [clearTimer, playFromIndex, stopActiveAudio]);
 
   const setCrossfadeDurationMs = useCallback((ms: number): void => {
     const clamped = Math.min(1500, Math.max(100, Math.round(ms)));
@@ -1021,6 +1239,7 @@ export function QueueProvider({ children }: { children: React.ReactNode }): Reac
       selectedVoiceName,
       showAllVoices,
       voiceFilter,
+      ttsEngine,
       playlists,
       drawerOpen,
       playlistModalOpen,
@@ -1037,6 +1256,7 @@ export function QueueProvider({ children }: { children: React.ReactNode }): Reac
       setSelectedVoiceName,
       setShowAllVoices,
       setVoiceFilter,
+      setTtsEngine,
       setSpeechRate,
       setCrossfadeDurationMs,
       setNowViewingItem,
@@ -1069,6 +1289,7 @@ export function QueueProvider({ children }: { children: React.ReactNode }): Reac
     selectedVoiceName,
     showAllVoices,
     voiceFilter,
+    ttsEngine,
     playlists,
     drawerOpen,
     playlistModalOpen,
@@ -1096,6 +1317,7 @@ export function QueueProvider({ children }: { children: React.ReactNode }): Reac
     setSelectedVoiceName,
     setShowAllVoices,
     setVoiceFilter,
+    setTtsEngine,
     setSpeechRate,
     setCrossfadeDurationMs,
     setNowViewingItem,

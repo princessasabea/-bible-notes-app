@@ -198,9 +198,9 @@ export function MiniPlayer(): React.ReactElement {
                 Speed {speechRate.toFixed(2)}x
                 <input
                   type="range"
-                  min={0.85}
-                  max={1.2}
-                  step={0.01}
+                  min={0.75}
+                  max={1.5}
+                  step={0.05}
                   value={speechRate}
                   onChange={(event) => setSpeechRate(Number(event.target.value))}
                 />
