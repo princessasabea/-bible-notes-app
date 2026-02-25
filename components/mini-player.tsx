@@ -273,8 +273,12 @@ export function MiniPlayer(): React.ReactElement {
                         if (!playlistName.trim()) {
                           return;
                         }
-                        void createPlaylist(playlistName);
-                        setPlaylistName("");
+                        void (async () => {
+                          const createdId = await createPlaylist(playlistName);
+                          if (createdId) {
+                            setPlaylistName("");
+                          }
+                        })();
                       }}
                     >
                       Create

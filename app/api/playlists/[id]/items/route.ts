@@ -3,6 +3,7 @@ import { z } from "zod";
 import { query } from "@/lib/db";
 import { requireUserId } from "@/lib/auth-user";
 import { assertSameOrigin, sanitizeText } from "@/lib/security";
+import { ensurePlaylistSchema } from "@/lib/playlist-schema";
 
 type PlaylistOwnerRow = { id: string };
 
@@ -27,6 +28,7 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
   try {
     assertSameOrigin(request);
     const userId = await requireUserId();
+    await ensurePlaylistSchema();
     const { id: playlistId } = await context.params;
 
     const [owner] = await query<PlaylistOwnerRow>(

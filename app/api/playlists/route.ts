@@ -3,6 +3,7 @@ import { z } from "zod";
 import { query } from "@/lib/db";
 import { requireUserId } from "@/lib/auth-user";
 import { assertSameOrigin, sanitizeText } from "@/lib/security";
+import { ensurePlaylistSchema } from "@/lib/playlist-schema";
 
 type PlaylistRow = {
   id: string;
@@ -27,6 +28,7 @@ const createSchema = z.object({
 export async function GET(): Promise<Response> {
   try {
     const userId = await requireUserId();
+    await ensurePlaylistSchema();
 
     const playlists = await query<PlaylistRow>(
       `SELECT id, name, created_at
@@ -76,6 +78,7 @@ export async function POST(request: Request): Promise<Response> {
   try {
     assertSameOrigin(request);
     const userId = await requireUserId();
+    await ensurePlaylistSchema();
     const payload = await request.json();
     const parsed = createSchema.safeParse(payload);
 

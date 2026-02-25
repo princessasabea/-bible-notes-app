@@ -512,6 +512,7 @@ export function QueueProvider({ children }: { children: React.ReactNode }): Reac
   const createPlaylist = useCallback(async (name: string): Promise<string | null> => {
     const trimmed = name.trim();
     if (!trimmed) {
+      setStatusMessage("Playlist name is required.");
       return null;
     }
 
@@ -521,15 +522,32 @@ export function QueueProvider({ children }: { children: React.ReactNode }): Reac
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ name: trimmed })
       });
+
       if (!response.ok) {
+        let errorMessage = "Unable to create playlist.";
+        try {
+          const payload = (await response.json()) as { error?: string; issues?: unknown };
+          if (response.status === 401) {
+            errorMessage = "Please sign in again.";
+          } else if (payload.error) {
+            errorMessage = payload.error;
+          } else if (payload.issues) {
+            errorMessage = "Invalid playlist name.";
+          }
+        } catch {
+          // no-op: fall back to generic message
+        }
+        setStatusMessage(errorMessage);
         return null;
       }
 
       const payload = (await response.json()) as { playlist?: { id: string } };
       await refreshPlaylists();
+      setStatusMessage(`Created playlist "${trimmed}".`);
       return payload.playlist?.id ?? null;
     } catch (error) {
       console.error("playlist_create_failed", error);
+      setStatusMessage("Unable to create playlist.");
       return null;
     }
   }, [refreshPlaylists]);
@@ -548,13 +566,16 @@ export function QueueProvider({ children }: { children: React.ReactNode }): Reac
       });
 
       if (!response.ok) {
+        setStatusMessage("Unable to add chapter to playlist.");
         return false;
       }
 
       await refreshPlaylists();
+      setStatusMessage("Saved to playlist.");
       return true;
     } catch (error) {
       console.error("playlist_add_item_failed", error);
+      setStatusMessage("Unable to add chapter to playlist.");
       return false;
     }
   }, [refreshPlaylists]);
@@ -941,9 +962,15 @@ export function QueueProvider({ children }: { children: React.ReactNode }): Reac
   const deletePlaylist = useCallback((playlistId: string): void => {
     void (async () => {
       try {
-        await fetch(`/api/playlists/${playlistId}`, { method: "DELETE" });
+        const response = await fetch(`/api/playlists/${playlistId}`, { method: "DELETE" });
+        if (!response.ok) {
+          setStatusMessage("Unable to delete playlist.");
+          return;
+        }
+        setStatusMessage("Playlist deleted.");
       } catch (error) {
         console.error("playlist_delete_failed", error);
+        setStatusMessage("Unable to delete playlist.");
       } finally {
         await refreshPlaylists();
       }

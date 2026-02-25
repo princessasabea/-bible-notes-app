@@ -3,6 +3,7 @@ import { z } from "zod";
 import { execute, query } from "@/lib/db";
 import { requireUserId } from "@/lib/auth-user";
 import { assertSameOrigin, sanitizeText } from "@/lib/security";
+import { ensurePlaylistSchema } from "@/lib/playlist-schema";
 
 type PlaylistRow = {
   id: string;
@@ -18,6 +19,7 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
   try {
     assertSameOrigin(request);
     const userId = await requireUserId();
+    await ensurePlaylistSchema();
     const { id } = await context.params;
     const payload = await request.json();
     const parsed = patchSchema.safeParse(payload);
@@ -58,6 +60,7 @@ export async function DELETE(request: Request, context: { params: Promise<{ id: 
   try {
     assertSameOrigin(request);
     const userId = await requireUserId();
+    await ensurePlaylistSchema();
     const { id } = await context.params;
 
     const deleted = await execute(
