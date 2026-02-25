@@ -71,6 +71,7 @@ type QueueContextValue = {
   setSpeechRate: (rate: number) => void;
   setCrossfadeDurationMs: (ms: number) => void;
   setNowViewingItem: (item: QueueItem | null) => void;
+  primeSpeechFromUserGesture: () => void;
   playFromCurrent: () => Promise<void>;
   playFromIndex: (index: number) => Promise<void>;
   playChapterNow: (item: QueueItem) => Promise<void>;
@@ -79,11 +80,13 @@ type QueueContextValue = {
   togglePause: () => void;
   stop: () => void;
   saveCurrentQueueAsPlaylist: (name: string) => void;
+  createPlaylist: (name: string) => Promise<string | null>;
+  addChapterToPlaylist: (playlistId: string, item: QueueItem) => Promise<boolean>;
+  refreshPlaylists: () => Promise<void>;
   loadPlaylistIntoQueue: (playlistId: string) => void;
   deletePlaylist: (playlistId: string) => void;
 };
 
-const PLAYLIST_STORAGE_KEY = "fellowship.playlists.v1";
 const VOICE_STORAGE_KEY = "fellowship.voice.name.v1";
 const VOICE_FILTER_STORAGE_KEY = "fellowship.voice.filter.v1";
 const VOICE_SHOW_ALL_STORAGE_KEY = "fellowship.voice.showall.v1";
@@ -91,6 +94,22 @@ const RATE_STORAGE_KEY = "fellowship.voice.rate.v1";
 const CROSSFADE_STORAGE_KEY = "fellowship.crossfade.ms.v1";
 
 const QueueContext = createContext<QueueContextValue | null>(null);
+
+type PlaylistApiItem = {
+  id: string;
+  translation: string;
+  book: string;
+  chapter: number;
+  title: string;
+  position: number;
+};
+
+type PlaylistApi = {
+  id: string;
+  name: string;
+  created_at: string;
+  items: PlaylistApiItem[];
+};
 
 function parseVersesFromHtml(chapterHtml: string): VerseLine[] {
   const parser = new DOMParser();
@@ -345,14 +364,6 @@ export function QueueProvider({ children }: { children: React.ReactNode }): Reac
   useEffect(() => {
     const loadStored = (): void => {
       try {
-        const storedPlaylists = localStorage.getItem(PLAYLIST_STORAGE_KEY);
-        if (storedPlaylists) {
-          const parsed = JSON.parse(storedPlaylists) as Playlist[];
-          if (Array.isArray(parsed)) {
-            setPlaylists(parsed);
-          }
-        }
-
         const savedVoice = localStorage.getItem(VOICE_STORAGE_KEY);
         if (savedVoice) {
           setSelectedVoiceNameState(savedVoice);
@@ -390,10 +401,6 @@ export function QueueProvider({ children }: { children: React.ReactNode }): Reac
 
     loadStored();
   }, []);
-
-  useEffect(() => {
-    localStorage.setItem(PLAYLIST_STORAGE_KEY, JSON.stringify(playlists));
-  }, [playlists]);
 
   useEffect(() => {
     localStorage.setItem(VOICE_STORAGE_KEY, selectedVoiceName);
@@ -447,6 +454,114 @@ export function QueueProvider({ children }: { children: React.ReactNode }): Reac
 
     return availableVoices.find((entry) => entry.lang.toLowerCase().startsWith("en-us")) ?? availableVoices[0] ?? null;
   }, []);
+
+  const primeSpeechFromUserGesture = useCallback((): void => {
+    try {
+      const voices = speechSynthesis.getVoices();
+      const iosVoice = voices.find((voice) => /samantha|daniel|siri/i.test(voice.name));
+
+      const utterance = new SpeechSynthesisUtterance(" ");
+      if (iosVoice) {
+        utterance.voice = iosVoice;
+      }
+      utterance.rate = 1;
+      utterance.pitch = 1;
+      utterance.volume = 0;
+
+      speechSynthesis.cancel();
+      speechSynthesis.resume();
+      speechSynthesis.speak(utterance);
+      speechSynthesis.cancel();
+    } catch (error) {
+      console.error("speech_prime_failed", error);
+    }
+  }, []);
+
+  const refreshPlaylists = useCallback(async (): Promise<void> => {
+    try {
+      const response = await fetch("/api/playlists", { cache: "no-store" });
+      if (!response.ok) {
+        if (response.status === 401) {
+          setPlaylists([]);
+          return;
+        }
+        throw new Error(`playlists_fetch_failed_${response.status}`);
+      }
+
+      const payload = (await response.json()) as { playlists?: PlaylistApi[] };
+      const normalized: Playlist[] = (payload.playlists ?? []).map((entry) => ({
+        id: entry.id,
+        name: entry.name,
+        createdAt: Date.parse(entry.created_at),
+        chapters: (entry.items ?? [])
+          .sort((a, b) => a.position - b.position)
+          .map((item) => ({
+            id: item.id,
+            translation: item.translation,
+            book: item.book,
+            chapter: item.chapter,
+            title: item.title
+          }))
+      }));
+      setPlaylists(normalized);
+    } catch (error) {
+      console.error("playlists_refresh_failed", error);
+    }
+  }, []);
+
+  const createPlaylist = useCallback(async (name: string): Promise<string | null> => {
+    const trimmed = name.trim();
+    if (!trimmed) {
+      return null;
+    }
+
+    try {
+      const response = await fetch("/api/playlists", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: trimmed })
+      });
+      if (!response.ok) {
+        return null;
+      }
+
+      const payload = (await response.json()) as { playlist?: { id: string } };
+      await refreshPlaylists();
+      return payload.playlist?.id ?? null;
+    } catch (error) {
+      console.error("playlist_create_failed", error);
+      return null;
+    }
+  }, [refreshPlaylists]);
+
+  const addChapterToPlaylist = useCallback(async (playlistId: string, item: QueueItem): Promise<boolean> => {
+    try {
+      const response = await fetch(`/api/playlists/${playlistId}/items`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          translation: item.translation,
+          book: item.book,
+          chapter: item.chapter,
+          title: item.title
+        })
+      });
+
+      if (!response.ok) {
+        return false;
+      }
+
+      await refreshPlaylists();
+      return true;
+    } catch (error) {
+      console.error("playlist_add_item_failed", error);
+      return false;
+    }
+  }, [refreshPlaylists]);
+
+  useEffect(() => {
+    void refreshPlaylists();
+  }, [refreshPlaylists]);
 
   const fetchChapterVerses = useCallback(async (item: QueueItem): Promise<VerseLine[]> => {
     const response = await fetch("/api/bible/chapter", {
@@ -799,21 +914,17 @@ export function QueueProvider({ children }: { children: React.ReactNode }): Reac
   }, []);
 
   const saveCurrentQueueAsPlaylist = useCallback((name: string): void => {
-    const trimmed = name.trim();
-    if (!trimmed) {
-      return;
-    }
+    void (async () => {
+      const playlistId = await createPlaylist(name);
+      if (!playlistId) {
+        return;
+      }
 
-    setPlaylists((current) => [
-      {
-        id: makePlaylistId(),
-        name: trimmed,
-        createdAt: Date.now(),
-        chapters: [...queueRef.current]
-      },
-      ...current
-    ]);
-  }, []);
+      for (const chapter of queueRef.current) {
+        await addChapterToPlaylist(playlistId, chapter);
+      }
+    })();
+  }, [addChapterToPlaylist, createPlaylist]);
 
   const loadPlaylistIntoQueue = useCallback((playlistId: string): void => {
     const selected = playlists.find((entry) => entry.id === playlistId);
@@ -828,8 +939,16 @@ export function QueueProvider({ children }: { children: React.ReactNode }): Reac
   }, [playlists, stop]);
 
   const deletePlaylist = useCallback((playlistId: string): void => {
-    setPlaylists((current) => current.filter((entry) => entry.id !== playlistId));
-  }, []);
+    void (async () => {
+      try {
+        await fetch(`/api/playlists/${playlistId}`, { method: "DELETE" });
+      } catch (error) {
+        console.error("playlist_delete_failed", error);
+      } finally {
+        await refreshPlaylists();
+      }
+    })();
+  }, [refreshPlaylists]);
 
   const contextValue = useMemo<QueueContextValue>(() => {
     return {
@@ -865,6 +984,7 @@ export function QueueProvider({ children }: { children: React.ReactNode }): Reac
       setSpeechRate,
       setCrossfadeDurationMs,
       setNowViewingItem,
+      primeSpeechFromUserGesture,
       playFromCurrent,
       playFromIndex,
       playChapterNow,
@@ -873,6 +993,9 @@ export function QueueProvider({ children }: { children: React.ReactNode }): Reac
       togglePause,
       stop,
       saveCurrentQueueAsPlaylist,
+      createPlaylist,
+      addChapterToPlaylist,
+      refreshPlaylists,
       loadPlaylistIntoQueue,
       deletePlaylist
     };
@@ -909,6 +1032,9 @@ export function QueueProvider({ children }: { children: React.ReactNode }): Reac
     togglePause,
     stop,
     saveCurrentQueueAsPlaylist,
+    createPlaylist,
+    addChapterToPlaylist,
+    refreshPlaylists,
     loadPlaylistIntoQueue,
     deletePlaylist,
     setSelectedVoiceName,
@@ -916,7 +1042,8 @@ export function QueueProvider({ children }: { children: React.ReactNode }): Reac
     setVoiceFilter,
     setSpeechRate,
     setCrossfadeDurationMs,
-    setNowViewingItem
+    setNowViewingItem,
+    primeSpeechFromUserGesture
   ]);
 
   return <QueueContext.Provider value={contextValue}>{children}</QueueContext.Provider>;

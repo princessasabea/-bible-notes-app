@@ -45,8 +45,8 @@ export function MiniPlayer(): React.ReactElement {
     setVoiceFilter,
     setSpeechRate,
     setCrossfadeDurationMs,
-    saveCurrentQueueAsPlaylist,
-    loadPlaylistIntoQueue,
+    primeSpeechFromUserGesture,
+    createPlaylist,
     deletePlaylist
   } = useQueue();
 
@@ -137,6 +137,7 @@ export function MiniPlayer(): React.ReactElement {
                   type="button"
                   className="icon-btn icon-btn-primary"
                   onClick={() => {
+                    primeSpeechFromUserGesture();
                     if (queue.length > 0) {
                       void playFromCurrent();
                     } else if (nowViewingItem) {
@@ -272,11 +273,11 @@ export function MiniPlayer(): React.ReactElement {
                         if (!playlistName.trim()) {
                           return;
                         }
-                        saveCurrentQueueAsPlaylist(playlistName);
+                        void createPlaylist(playlistName);
                         setPlaylistName("");
                       }}
                     >
-                      Save
+                      Create
                     </button>
                   </div>
                   <div className="playlist-list">
@@ -288,7 +289,7 @@ export function MiniPlayer(): React.ReactElement {
                           <p>{playlist.chapters.length} chapters • {formatDate(playlist.createdAt)}</p>
                         </div>
                         <div className="action-row">
-                          <button type="button" className="ghost-button" onClick={() => loadPlaylistIntoQueue(playlist.id)}>Load</button>
+                          <button type="button" className="ghost-button" onClick={() => void playPlaylist(playlist.id)}>Play</button>
                           <button type="button" className="danger-button" onClick={() => deletePlaylist(playlist.id)}>Delete</button>
                         </div>
                       </div>
@@ -331,6 +332,7 @@ export function MiniPlayer(): React.ReactElement {
                   if (!selectedPlaylist) {
                     return;
                   }
+                  primeSpeechFromUserGesture();
                   void playPlaylist(selectedPlaylist.id);
                   setPlaylistScreenOpen(false);
                 }}
@@ -344,6 +346,7 @@ export function MiniPlayer(): React.ReactElement {
                   if (!selectedPlaylist) {
                     return;
                   }
+                  primeSpeechFromUserGesture();
                   void playPlaylist(selectedPlaylist.id, { shuffle: true });
                   setPlaylistScreenOpen(false);
                 }}
@@ -373,6 +376,7 @@ export function MiniPlayer(): React.ReactElement {
                 key={`${chapterItem.id}-${index}`}
                 className="playlist-track"
                 onClick={() => {
+                  primeSpeechFromUserGesture();
                   void playPlaylist(selectedPlaylist.id, { startIndex: index });
                   setPlaylistScreenOpen(false);
                 }}

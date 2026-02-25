@@ -57,6 +57,7 @@ export function ReaderMode({
   const {
     addToQueue,
     queue,
+    playlists,
     currentIndex,
     currentVerse,
     isPlaying,
@@ -67,7 +68,10 @@ export function ReaderMode({
     stop,
     setDrawerOpen,
     setNowViewingItem,
-    playNowViewing
+    playNowViewing,
+    primeSpeechFromUserGesture,
+    createPlaylist,
+    addChapterToPlaylist
   } = useQueue();
 
   const [translation, setTranslation] = useState<Translation>(initialTranslation === "AMP" ? "AMP" : "NKJV");
@@ -77,6 +81,9 @@ export function ReaderMode({
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [headerCompact, setHeaderCompact] = useState(false);
+  const [saveSheetOpen, setSaveSheetOpen] = useState(false);
+  const [newPlaylistName, setNewPlaylistName] = useState("");
+  const [saveToast, setSaveToast] = useState<string | null>(null);
 
   const selectedBook = useMemo(() => {
     return BIBLE_BOOKS.find((entry) => entry.name === book) ?? BIBLE_BOOKS.find((entry) => entry.name === "John")!;
@@ -199,10 +206,55 @@ export function ReaderMode({
     setDrawerOpen(true);
   };
 
+  const currentChapterItem = useMemo(() => {
+    return buildQueueItem({
+      book,
+      chapter,
+      translation,
+      title: buildQueueTitle(book, chapter, translation)
+    });
+  }, [book, chapter, translation]);
+
+  const showSavedToast = (label: string): void => {
+    setSaveToast(label);
+    window.setTimeout(() => setSaveToast(null), 2200);
+  };
+
+  const saveToExistingPlaylist = async (playlistId: string, playlistName: string): Promise<void> => {
+    const ok = await addChapterToPlaylist(playlistId, currentChapterItem);
+    if (!ok) {
+      setMessage("Unable to save to playlist.");
+      return;
+    }
+
+    setSaveSheetOpen(false);
+    showSavedToast(`Saved to ${playlistName}`);
+  };
+
+  const createAndSavePlaylist = async (): Promise<void> => {
+    const createdId = await createPlaylist(newPlaylistName);
+    if (!createdId) {
+      setMessage("Unable to create playlist.");
+      return;
+    }
+
+    const ok = await addChapterToPlaylist(createdId, currentChapterItem);
+    if (!ok) {
+      setMessage("Playlist created, but chapter was not saved.");
+      return;
+    }
+
+    const label = newPlaylistName.trim();
+    setNewPlaylistName("");
+    setSaveSheetOpen(false);
+    showSavedToast(`Saved to ${label}`);
+  };
+
   const handleReadNow = (): void => {
     if (!chapterHtml || loading || isPlaying) {
       return;
     }
+    primeSpeechFromUserGesture();
     void playNowViewing();
   };
 
@@ -260,6 +312,10 @@ export function ReaderMode({
             + Add to Queue
           </button>
 
+          <button type="button" className="ghost-button" onClick={() => setSaveSheetOpen(true)}>
+            ⭐ Save to Playlist
+          </button>
+
           <button type="button" onClick={handleReadNow} disabled={!chapterHtml || loading || isPlaying}>
             🎧 Read Chapter
           </button>
@@ -294,6 +350,46 @@ export function ReaderMode({
       </div>
 
       {message ? <p className="status-text reader-message">{message}</p> : null}
+      {saveToast ? <div className="playlist-save-toast">{saveToast}</div> : null}
+
+      {saveSheetOpen ? (
+        <div className="save-sheet-overlay" role="dialog" aria-modal="true" aria-label="Save to playlist">
+          <div className="save-sheet">
+            <div className="save-sheet-head">
+              <h3>Save to…</h3>
+              <button type="button" className="ghost-button" onClick={() => setSaveSheetOpen(false)}>Close</button>
+            </div>
+
+            <div className="save-sheet-new">
+              <label>
+                ➕ New Playlist
+                <input
+                  value={newPlaylistName}
+                  onChange={(event) => setNewPlaylistName(event.target.value)}
+                  placeholder="Morning, Study, Sleep..."
+                />
+              </label>
+              <button type="button" onClick={() => void createAndSavePlaylist()} disabled={!newPlaylistName.trim()}>
+                Create
+              </button>
+            </div>
+
+            <div className="save-sheet-list">
+              {playlists.length === 0 ? <p className="placeholder-text">No playlists yet.</p> : null}
+              {playlists.map((playlist) => (
+                <button
+                  key={playlist.id}
+                  type="button"
+                  className="save-sheet-option"
+                  onClick={() => void saveToExistingPlaylist(playlist.id, playlist.name)}
+                >
+                  {playlist.name}
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+      ) : null}
 
       <style jsx>{`
         .reader-page {
@@ -414,6 +510,73 @@ export function ReaderMode({
           flex-wrap: wrap;
           justify-content: flex-end;
           max-width: min(95vw, 620px);
+        }
+
+        .save-sheet-overlay {
+          position: fixed;
+          inset: 0;
+          z-index: 120;
+          background: rgba(23, 16, 10, 0.35);
+          display: grid;
+          align-items: end;
+          padding: 0.8rem;
+        }
+
+        .save-sheet {
+          border-radius: 18px 18px 0 0;
+          background: #fff7ec;
+          border: 1px solid #e3d1b8;
+          box-shadow: 0 -12px 30px rgba(0, 0, 0, 0.2);
+          padding: 0.9rem;
+          max-height: 72vh;
+          overflow: auto;
+          display: grid;
+          gap: 0.8rem;
+        }
+
+        .save-sheet-head {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+        }
+
+        .save-sheet-head h3 {
+          margin: 0;
+          font-family: Georgia, "Times New Roman", serif;
+        }
+
+        .save-sheet-new {
+          display: flex;
+          gap: 0.5rem;
+          align-items: end;
+        }
+
+        .save-sheet-list {
+          display: grid;
+          gap: 0.45rem;
+        }
+
+        .save-sheet-option {
+          text-align: left;
+          border-radius: 12px;
+          background: #fffdf8;
+          border: 1px solid #e6d6bf;
+          color: #2f251c;
+          padding: 0.72rem 0.75rem;
+        }
+
+        .playlist-save-toast {
+          position: fixed;
+          bottom: 7.2rem;
+          left: 50%;
+          transform: translateX(-50%);
+          z-index: 121;
+          background: rgba(255, 248, 235, 0.95);
+          border: 1px solid #e8d7c0;
+          border-radius: 999px;
+          padding: 0.42rem 0.88rem;
+          color: #4e3b2a;
+          box-shadow: 0 6px 16px rgba(0, 0, 0, 0.12);
         }
 
         .placeholder-text,
