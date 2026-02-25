@@ -26,6 +26,7 @@ export function MiniPlayer(): React.ReactElement {
     showAllVoices,
     voiceFilter,
     playlists,
+    playlistModalOpen,
     statusMessage,
     playFromCurrent,
     playFromIndex,
@@ -45,6 +46,7 @@ export function MiniPlayer(): React.ReactElement {
     setVoiceFilter,
     setSpeechRate,
     setCrossfadeDurationMs,
+    setPlaylistModalOpen,
     primeSpeechFromUserGesture,
     createPlaylist,
     deletePlaylist
@@ -55,7 +57,6 @@ export function MiniPlayer(): React.ReactElement {
   const [isExpanded, setIsExpanded] = useState(false);
   const [activeTab, setActiveTab] = useState<"queue" | "playlists">("queue");
   const [chapterVerseCount, setChapterVerseCount] = useState(0);
-  const [playlistScreenOpen, setPlaylistScreenOpen] = useState(false);
   const [selectedPlaylistId, setSelectedPlaylistId] = useState<string | null>(null);
 
   const activeItem = queue[currentIndex] ?? null;
@@ -93,9 +94,17 @@ export function MiniPlayer(): React.ReactElement {
     return 0;
   }, [chapterVerseCount, currentVerse, queue.length, currentIndex, isPlaying]);
 
+  useEffect(() => {
+    if (!playlistModalOpen) {
+      return;
+    }
+    setActiveTab("playlists");
+    setIsExpanded(true);
+  }, [playlistModalOpen]);
+
   return (
     <>
-      <section className={`mini-player ${isExpanded ? "expanded" : "collapsed"} ${playlistScreenOpen ? "is-shrunk" : ""}`} role="region" aria-label="Audio player">
+      <section className={`mini-player ${isExpanded ? "expanded" : "collapsed"} ${playlistModalOpen ? "is-shrunk" : ""}`} role="region" aria-label="Audio player">
         {!isExpanded ? (
           <button
             type="button"
@@ -223,7 +232,7 @@ export function MiniPlayer(): React.ReactElement {
                 className={`mini-tab ${activeTab === "playlists" ? "is-active" : ""}`}
                 onClick={() => {
                   setActiveTab("playlists");
-                  setPlaylistScreenOpen(true);
+                  setPlaylistModalOpen(true);
                 }}
               >
                 Playlists
@@ -308,13 +317,13 @@ export function MiniPlayer(): React.ReactElement {
         ) : null}
       </section>
 
-      <div className={`playlist-screen ${playlistScreenOpen ? "is-open" : ""}`} aria-hidden={!playlistScreenOpen}>
+      <div className={`playlist-screen ${playlistModalOpen ? "is-open" : ""}`} aria-hidden={!playlistModalOpen}>
         <div className="playlist-screen-inner">
           <div className="playlist-screen-top">
             <button
               type="button"
               className="ghost-button"
-              onClick={() => setPlaylistScreenOpen(false)}
+              onClick={() => setPlaylistModalOpen(false)}
             >
               Done
             </button>
@@ -338,7 +347,7 @@ export function MiniPlayer(): React.ReactElement {
                   }
                   primeSpeechFromUserGesture();
                   void playPlaylist(selectedPlaylist.id);
-                  setPlaylistScreenOpen(false);
+                  setPlaylistModalOpen(false);
                 }}
               >
                 ▶ Play
@@ -352,7 +361,7 @@ export function MiniPlayer(): React.ReactElement {
                   }
                   primeSpeechFromUserGesture();
                   void playPlaylist(selectedPlaylist.id, { shuffle: true });
-                  setPlaylistScreenOpen(false);
+                  setPlaylistModalOpen(false);
                 }}
               >
                 Shuffle
@@ -382,7 +391,7 @@ export function MiniPlayer(): React.ReactElement {
                 onClick={() => {
                   primeSpeechFromUserGesture();
                   void playPlaylist(selectedPlaylist.id, { startIndex: index });
-                  setPlaylistScreenOpen(false);
+                  setPlaylistModalOpen(false);
                 }}
               >
                 <span className="track-index">{index + 1}</span>

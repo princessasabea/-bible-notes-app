@@ -67,6 +67,7 @@ export function ReaderMode({
     togglePause,
     stop,
     setDrawerOpen,
+    setPlaylistModalOpen,
     setNowViewingItem,
     playNowViewing,
     primeSpeechFromUserGesture,
@@ -316,6 +317,10 @@ export function ReaderMode({
             ⭐ Save to Playlist
           </button>
 
+          <button type="button" className="ghost-button" onClick={() => setPlaylistModalOpen(true)}>
+            🎵 Playlists
+          </button>
+
           <button type="button" onClick={handleReadNow} disabled={!chapterHtml || loading || isPlaying}>
             🎧 Read Chapter
           </button>
@@ -346,6 +351,9 @@ export function ReaderMode({
         </button>
         <button type="button" className="ghost-button" onClick={() => setDrawerOpen(true)}>
           Open Queue
+        </button>
+        <button type="button" className="ghost-button" onClick={() => setPlaylistModalOpen(true)}>
+          Open Playlists
         </button>
       </div>
 

@@ -110,8 +110,20 @@ export async function POST(request: Request): Promise<Response> {
     const pgError = (typeof error === "object" && error !== null ? error : {}) as {
       code?: string;
       column?: string;
+      constraint?: string;
     };
     const pgCode = String(pgError.code ?? "");
+    if (pgCode === "23503") {
+      return NextResponse.json(
+        {
+          error: "Session user is not linked to a valid account row.",
+          ...(process.env.NODE_ENV === "development" && {
+            debug: `fk_violation:${pgError.constraint ?? "unknown_constraint"}`
+          })
+        },
+        { status: 400 }
+      );
+    }
     if (pgCode === "23502") {
       return NextResponse.json(
         {

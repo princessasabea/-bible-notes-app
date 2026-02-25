@@ -5,7 +5,7 @@ import { query } from "@/lib/db";
 import { requireUserId } from "@/lib/auth-user";
 import { assertSameOrigin, sanitizeText } from "@/lib/security";
 
-type PlaylistOwnerRow = { id: string };
+type PlaylistLookupRow = { id: string; user_id: string };
 
 type PlaylistItemRow = {
   id: string;
@@ -30,13 +30,25 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
     const userId = await requireUserId();
     const { id: playlistId } = await context.params;
 
-    const [owner] = await query<PlaylistOwnerRow>(
-      `SELECT id FROM playlists WHERE id = $1 AND user_id = $2 LIMIT 1`,
-      [playlistId, userId]
+    const [playlist] = await query<PlaylistLookupRow>(
+      `SELECT id, user_id FROM playlists WHERE id = $1 LIMIT 1`,
+      [playlistId]
     );
 
-    if (!owner) {
+    if (!playlist) {
       return NextResponse.json({ error: "Playlist not found" }, { status: 404 });
+    }
+
+    if (playlist.user_id !== userId) {
+      return NextResponse.json(
+        {
+          error: "Playlist belongs to another account.",
+          ...(process.env.NODE_ENV === "development" && {
+            debug: { sessionUserId: userId, playlistUserId: playlist.user_id }
+          })
+        },
+        { status: 403 }
+      );
     }
 
     const payload = await request.json();
