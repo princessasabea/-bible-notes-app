@@ -4,7 +4,6 @@ import { z } from "zod";
 import { query } from "@/lib/db";
 import { requireUserId } from "@/lib/auth-user";
 import { assertSameOrigin, sanitizeText } from "@/lib/security";
-import { ensurePlaylistSchema } from "@/lib/playlist-schema";
 
 type PlaylistOwnerRow = { id: string };
 
@@ -29,7 +28,6 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
   try {
     assertSameOrigin(request);
     const userId = await requireUserId();
-    await ensurePlaylistSchema();
     const { id: playlistId } = await context.params;
 
     const [owner] = await query<PlaylistOwnerRow>(
@@ -78,6 +76,49 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
 
     if (String(error).includes("Origin mismatch")) {
       return NextResponse.json({ error: "Origin mismatch" }, { status: 403 });
+    }
+
+    const pgError = (typeof error === "object" && error !== null ? error : {}) as {
+      code?: string;
+      column?: string;
+      constraint?: string;
+    };
+    const pgCode = String(pgError.code ?? "");
+    if (pgCode === "22P02") {
+      return NextResponse.json({ error: "Invalid playlist id." }, { status: 400 });
+    }
+    if (pgCode === "23503") {
+      return NextResponse.json(
+        {
+          error: "Playlist not found.",
+          ...(process.env.NODE_ENV === "development" && {
+            debug: `fk_violation:${pgError.constraint ?? "unknown_constraint"}`
+          })
+        },
+        { status: 404 }
+      );
+    }
+    if (pgCode === "23502") {
+      return NextResponse.json(
+        {
+          error: "Playlist item payload is incomplete.",
+          ...(process.env.NODE_ENV === "development" && {
+            debug: `not_null_violation:${pgError.column ?? "unknown_column"}`
+          })
+        },
+        { status: 400 }
+      );
+    }
+    if (pgCode === "42703") {
+      return NextResponse.json(
+        {
+          error: "Playlist schema mismatch.",
+          ...(process.env.NODE_ENV === "development" && {
+            debug: `undefined_column:${pgError.column ?? "unknown_column"}`
+          })
+        },
+        { status: 500 }
+      );
     }
 
     console.error("playlist_item_post_failed", { error: String(error) });

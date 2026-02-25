@@ -4,7 +4,6 @@ import { z } from "zod";
 import { query } from "@/lib/db";
 import { requireUserId } from "@/lib/auth-user";
 import { assertSameOrigin, sanitizeText } from "@/lib/security";
-import { ensurePlaylistSchema } from "@/lib/playlist-schema";
 
 type PlaylistRow = {
   id: string;
@@ -29,7 +28,6 @@ const createSchema = z.object({
 export async function GET(): Promise<Response> {
   try {
     const userId = await requireUserId();
-    await ensurePlaylistSchema();
 
     const playlists = await query<PlaylistRow>(
       `SELECT id, name, created_at
@@ -85,7 +83,6 @@ export async function POST(request: Request): Promise<Response> {
   try {
     assertSameOrigin(request);
     const userId = await requireUserId();
-    await ensurePlaylistSchema();
     const payload = await request.json();
     const parsed = createSchema.safeParse(payload);
 
@@ -108,6 +105,34 @@ export async function POST(request: Request): Promise<Response> {
 
     if (String(error).includes("Origin mismatch")) {
       return NextResponse.json({ error: "Origin mismatch" }, { status: 403 });
+    }
+
+    const pgError = (typeof error === "object" && error !== null ? error : {}) as {
+      code?: string;
+      column?: string;
+    };
+    const pgCode = String(pgError.code ?? "");
+    if (pgCode === "23502") {
+      return NextResponse.json(
+        {
+          error: "Playlist schema requires additional fields.",
+          ...(process.env.NODE_ENV === "development" && {
+            debug: `not_null_violation:${pgError.column ?? "unknown_column"}`
+          })
+        },
+        { status: 400 }
+      );
+    }
+    if (pgCode === "42703") {
+      return NextResponse.json(
+        {
+          error: "Playlist schema mismatch.",
+          ...(process.env.NODE_ENV === "development" && {
+            debug: `undefined_column:${pgError.column ?? "unknown_column"}`
+          })
+        },
+        { status: 500 }
+      );
     }
 
     console.error("playlists_post_failed", { error: String(error) });

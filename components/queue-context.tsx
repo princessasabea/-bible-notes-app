@@ -485,7 +485,18 @@ export function QueueProvider({ children }: { children: React.ReactNode }): Reac
           setPlaylists([]);
           return;
         }
-        throw new Error(`playlists_fetch_failed_${response.status}`);
+        let details = `playlists_fetch_failed_${response.status}`;
+        try {
+          const payload = (await response.json()) as { error?: string; debug?: string };
+          if (process.env.NODE_ENV === "development" && payload.debug) {
+            details = payload.debug;
+          } else if (payload.error) {
+            details = payload.error;
+          }
+        } catch {
+          // keep default details
+        }
+        throw new Error(details);
       }
 
       const payload = (await response.json()) as { playlists?: PlaylistApi[] };
@@ -506,6 +517,7 @@ export function QueueProvider({ children }: { children: React.ReactNode }): Reac
       setPlaylists(normalized);
     } catch (error) {
       console.error("playlists_refresh_failed", error);
+      setStatusMessage(error instanceof Error ? error.message : "Unable to load playlists.");
     }
   }, []);
 
@@ -568,7 +580,22 @@ export function QueueProvider({ children }: { children: React.ReactNode }): Reac
       });
 
       if (!response.ok) {
-        setStatusMessage("Unable to add chapter to playlist.");
+        let errorMessage = "Unable to add chapter to playlist.";
+        try {
+          const payload = (await response.json()) as { error?: string; issues?: unknown; debug?: string };
+          if (response.status === 401) {
+            errorMessage = "Please sign in again.";
+          } else if (process.env.NODE_ENV === "development" && payload.debug) {
+            errorMessage = payload.debug;
+          } else if (payload.error) {
+            errorMessage = payload.error;
+          } else if (payload.issues) {
+            errorMessage = "Invalid chapter payload.";
+          }
+        } catch {
+          // no-op
+        }
+        setStatusMessage(errorMessage);
         return false;
       }
 
