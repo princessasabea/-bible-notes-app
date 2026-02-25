@@ -1190,6 +1190,12 @@ button:active,
   color: #35271c;
 }
 
+.engine-selector {
+  margin-top: 0.35rem;
+  display: inline-flex;
+  gap: 0.35rem;
+}
+
 .mini-tab-panel {
   margin-top: 0.65rem;
   display: grid;

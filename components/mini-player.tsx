@@ -25,6 +25,7 @@ export function MiniPlayer(): React.ReactElement {
     selectedVoiceName,
     showAllVoices,
     voiceFilter,
+    ttsEngine,
     playlists,
     playlistModalOpen,
     statusMessage,
@@ -44,6 +45,7 @@ export function MiniPlayer(): React.ReactElement {
     setSelectedVoiceName,
     setShowAllVoices,
     setVoiceFilter,
+    setTtsEngine,
     setSpeechRate,
     setCrossfadeDurationMs,
     setPlaylistModalOpen,
@@ -170,28 +172,57 @@ export function MiniPlayer(): React.ReactElement {
 
             <div className="mini-settings">
               <label>
-                Voice
-                <select value={selectedVoiceName} onChange={(event) => setSelectedVoiceName(event.target.value)}>
-                  <option value="">Auto (en-US)</option>
-                  {filteredVoices.map((voice) => (
-                    <option key={voice.name} value={voice.name}>{voice.name} ({voice.lang})</option>
-                  ))}
-                </select>
+                Voice Engine
+                <div className="engine-selector">
+                  <button
+                    type="button"
+                    className={`mini-tab ${ttsEngine === "browser" ? "is-active" : ""}`}
+                    onClick={() => setTtsEngine("browser")}
+                  >
+                    🟢 Device Voice
+                  </button>
+                  <button
+                    type="button"
+                    className={`mini-tab ${ttsEngine === "openai" ? "is-active" : ""}`}
+                    onClick={() => setTtsEngine("openai")}
+                  >
+                    🔵 AI Voice
+                  </button>
+                </div>
+                <small className="status-text">
+                  {ttsEngine === "browser"
+                    ? "Uses your device voices (free/offline)."
+                    : "Uses OpenAI voice via API (premium quality)."}
+                </small>
               </label>
 
-              <label className="checkbox-row">
-                <input type="checkbox" checked={showAllVoices} onChange={(event) => setShowAllVoices(event.target.checked)} />
-                <span>Show all voices</span>
-              </label>
+              {ttsEngine === "browser" ? (
+                <>
+                  <label>
+                    Voice
+                    <select value={selectedVoiceName} onChange={(event) => setSelectedVoiceName(event.target.value)}>
+                      <option value="">Auto (en-US)</option>
+                      {filteredVoices.map((voice) => (
+                        <option key={voice.name} value={voice.name}>{voice.name} ({voice.lang})</option>
+                      ))}
+                    </select>
+                  </label>
 
-              {!showAllVoices ? (
-                <label>
-                  Voice type
-                  <select value={voiceFilter} onChange={(event) => setVoiceFilter(event.target.value as "enhanced" | "premium")}>
-                    <option value="enhanced">Only Enhanced</option>
-                    <option value="premium">Only Premium</option>
-                  </select>
-                </label>
+                  <label className="checkbox-row">
+                    <input type="checkbox" checked={showAllVoices} onChange={(event) => setShowAllVoices(event.target.checked)} />
+                    <span>Show all voices</span>
+                  </label>
+
+                  {!showAllVoices ? (
+                    <label>
+                      Voice type
+                      <select value={voiceFilter} onChange={(event) => setVoiceFilter(event.target.value as "enhanced" | "premium")}>
+                        <option value="enhanced">Only Enhanced</option>
+                        <option value="premium">Only Premium</option>
+                      </select>
+                    </label>
+                  ) : null}
+                </>
               ) : null}
 
               <label>

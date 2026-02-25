@@ -838,6 +838,7 @@ export function QueueProvider({ children }: { children: React.ReactNode }): Reac
                 // no-op
               }
               setStatusMessage(errorMessage);
+              fetchAbortRef.current = null;
               setIsPlaying(false);
               setIsPaused(false);
               return;
@@ -846,6 +847,7 @@ export function QueueProvider({ children }: { children: React.ReactNode }): Reac
             const payload = (await response.json()) as { redirectUrl?: string };
             if (!payload.redirectUrl) {
               setStatusMessage("Missing audio URL from AI voice.");
+              fetchAbortRef.current = null;
               setIsPlaying(false);
               setIsPaused(false);
               return;
@@ -896,6 +898,8 @@ export function QueueProvider({ children }: { children: React.ReactNode }): Reac
               return;
             }
             console.error("openai_tts_playback_failed", error);
+            activeAudioRef.current = null;
+            fetchAbortRef.current = null;
             setStatusMessage(error instanceof Error ? error.message : "AI voice playback failed.");
             setIsPlaying(false);
             setIsPaused(false);

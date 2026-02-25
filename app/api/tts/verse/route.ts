@@ -24,9 +24,21 @@ export async function POST(request: Request): Promise<Response> {
     const userId = await requireUserId();
     const ip = getClientIp(request);
 
-    const burstUser = consumeRateLimit(`tts:user:${userId}:burst`, 5, 60_000);
-    const sustainedUser = consumeRateLimit(`tts:user:${userId}:sustained`, 30, 60 * 60_000);
-    const burstIp = consumeRateLimit(`tts:ip:${ip}:burst`, 10, 60_000);
+    const burstUser = consumeRateLimit(
+      `tts:user:${userId}:burst`,
+      env.ttsUserBurstLimit,
+      env.ttsUserBurstWindowMs
+    );
+    const sustainedUser = consumeRateLimit(
+      `tts:user:${userId}:sustained`,
+      env.ttsUserSustainedLimit,
+      env.ttsUserSustainedWindowMs
+    );
+    const burstIp = consumeRateLimit(
+      `tts:ip:${ip}:burst`,
+      env.ttsIpBurstLimit,
+      env.ttsIpBurstWindowMs
+    );
 
     if (!burstUser || !sustainedUser || !burstIp) {
       return NextResponse.json({ error: "Rate limit exceeded" }, { status: 429 });
