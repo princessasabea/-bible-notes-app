@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { randomUUID } from "node:crypto";
 import { z } from "zod";
 import { query } from "@/lib/db";
 import { requireUserId } from "@/lib/auth-user";
@@ -70,7 +71,13 @@ export async function GET(): Promise<Response> {
     }
 
     console.error("playlists_get_failed", { error: String(error) });
-    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
+    return NextResponse.json(
+      {
+        error: "Internal server error",
+        ...(process.env.NODE_ENV === "development" && { debug: String(error) })
+      },
+      { status: 500 }
+    );
   }
 }
 
@@ -87,10 +94,10 @@ export async function POST(request: Request): Promise<Response> {
     }
 
     const [created] = await query<PlaylistRow>(
-      `INSERT INTO playlists (user_id, name)
-       VALUES ($1, $2)
+      `INSERT INTO playlists (id, user_id, name)
+       VALUES ($1, $2, $3)
        RETURNING id, name, created_at`,
-      [userId, parsed.data.name]
+      [randomUUID(), userId, parsed.data.name]
     );
 
     return NextResponse.json({ playlist: { ...created, items: [] } }, { status: 201 });
@@ -104,6 +111,12 @@ export async function POST(request: Request): Promise<Response> {
     }
 
     console.error("playlists_post_failed", { error: String(error) });
-    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
+    return NextResponse.json(
+      {
+        error: "Internal server error",
+        ...(process.env.NODE_ENV === "development" && { debug: String(error) })
+      },
+      { status: 500 }
+    );
   }
 }

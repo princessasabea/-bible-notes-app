@@ -52,7 +52,13 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
     }
 
     console.error("playlist_patch_failed", { error: String(error) });
-    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
+    return NextResponse.json(
+      {
+        error: "Internal server error",
+        ...(process.env.NODE_ENV === "development" && { debug: String(error) })
+      },
+      { status: 500 }
+    );
   }
 }
 
@@ -84,6 +90,12 @@ export async function DELETE(request: Request, context: { params: Promise<{ id: 
     }
 
     console.error("playlist_delete_failed", { error: String(error) });
-    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
+    return NextResponse.json(
+      {
+        error: "Internal server error",
+        ...(process.env.NODE_ENV === "development" && { debug: String(error) })
+      },
+      { status: 500 }
+    );
   }
 }

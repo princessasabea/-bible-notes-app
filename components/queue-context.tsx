@@ -526,9 +526,11 @@ export function QueueProvider({ children }: { children: React.ReactNode }): Reac
       if (!response.ok) {
         let errorMessage = "Unable to create playlist.";
         try {
-          const payload = (await response.json()) as { error?: string; issues?: unknown };
+          const payload = (await response.json()) as { error?: string; issues?: unknown; debug?: string };
           if (response.status === 401) {
             errorMessage = "Please sign in again.";
+          } else if (process.env.NODE_ENV === "development" && payload.debug) {
+            errorMessage = payload.debug;
           } else if (payload.error) {
             errorMessage = payload.error;
           } else if (payload.issues) {

@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { randomUUID } from "node:crypto";
 import { z } from "zod";
 import { query } from "@/lib/db";
 import { requireUserId } from "@/lib/auth-user";
@@ -54,10 +55,11 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
     );
 
     const [created] = await query<PlaylistItemRow>(
-      `INSERT INTO playlist_items (playlist_id, user_id, translation, book, chapter, title, position)
-       VALUES ($1, $2, $3, $4, $5, $6, $7)
+      `INSERT INTO playlist_items (id, playlist_id, user_id, translation, book, chapter, title, position)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
        RETURNING id, playlist_id, translation, book, chapter, title, position`,
       [
+        randomUUID(),
         playlistId,
         userId,
         parsed.data.translation,
@@ -79,6 +81,12 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
     }
 
     console.error("playlist_item_post_failed", { error: String(error) });
-    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
+    return NextResponse.json(
+      {
+        error: "Internal server error",
+        ...(process.env.NODE_ENV === "development" && { debug: String(error) })
+      },
+      { status: 500 }
+    );
   }
 }
