@@ -9,7 +9,12 @@ if (!connectionString) {
   throw new Error("DATABASE_URL is required for auth");
 }
 
-const pool = new Pool({ connectionString, ssl: true });
+const pool = new Pool({
+  connectionString: process.env.DATABASE_URL,
+  ssl: {
+    rejectUnauthorized: false
+  }
+});
 
 export const { handlers, auth, signIn, signOut } = NextAuth({
   adapter: PostgresAdapter(pool),
