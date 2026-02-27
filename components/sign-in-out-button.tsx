@@ -1,4 +1,5 @@
-import { signIn, signOut } from "@/auth";
+import { signOut } from "@/auth";
+import { GoogleSignInButton } from "./google-sign-in-button";
 
 export function SignInOutButton({ email }: { email: string | null }): React.ReactElement {
   return email ? (
@@ -13,13 +14,6 @@ export function SignInOutButton({ email }: { email: string | null }): React.Reac
       <button type="submit" className="ghost-button">Sign out</button>
     </form>
   ) : (
-    <form
-      action={async () => {
-        "use server";
-        await signIn();
-      }}
-    >
-      <button type="submit">Sign in</button>
-    </form>
+    <GoogleSignInButton />
   );
 }
