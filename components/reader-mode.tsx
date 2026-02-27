@@ -22,17 +22,15 @@ function normalizeBookFromPath(pathValue: string): string {
 }
 
 function extractVerseNumbersFromHtml(chapterHtml: string): number[] {
-  const parser = new DOMParser();
-  const doc = parser.parseFromString(chapterHtml, "text/html");
   const seen = new Set<number>();
   const verseNumbers: number[] = [];
 
-  for (const sup of Array.from(doc.querySelectorAll("p sup"))) {
-    const number = Number((sup.textContent ?? "").replace(/\D+/g, ""));
+  const supMatches = chapterHtml.match(/<sup[^>]*>\s*\d+\s*<\/sup>/gi) ?? [];
+  for (const entry of supMatches) {
+    const number = Number(entry.replace(/[^\d]/g, ""));
     if (!Number.isFinite(number) || number < 1 || seen.has(number)) {
       continue;
     }
-
     seen.add(number);
     verseNumbers.push(number);
   }

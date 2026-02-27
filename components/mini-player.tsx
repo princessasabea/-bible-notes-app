@@ -3,6 +3,11 @@
 import { useEffect, useMemo, useState } from "react";
 import { useFilteredVoices, useQueue } from "@/components/queue-context";
 
+const aiVoices = [
+  { id: "alloy", label: "Alloy (Natural)" },
+  { id: "verse", label: "Verse (Warm)" }
+];
+
 function formatDate(timestamp: number): string {
   return new Date(timestamp).toLocaleDateString(undefined, {
     month: "short",
@@ -22,7 +27,9 @@ export function MiniPlayer(): React.ReactElement {
     isPaused,
     speechRate,
     crossfadeDurationMs,
+    repeatMode,
     selectedVoiceName,
+    aiVoiceId,
     showAllVoices,
     voiceFilter,
     ttsEngine,
@@ -43,11 +50,13 @@ export function MiniPlayer(): React.ReactElement {
     moveItem,
     setCurrentIndex,
     setSelectedVoiceName,
+    setAiVoiceId,
     setShowAllVoices,
     setVoiceFilter,
     setTtsEngine,
     setSpeechRate,
     setCrossfadeDurationMs,
+    setRepeatMode,
     setPlaylistModalOpen,
     primeSpeechFromUserGesture,
     createPlaylist,
@@ -225,12 +234,23 @@ export function MiniPlayer(): React.ReactElement {
                 </>
               ) : null}
 
+              {ttsEngine === "openai" ? (
+                <label>
+                  AI Voice
+                  <select value={aiVoiceId} onChange={(event) => setAiVoiceId(event.target.value)}>
+                    {aiVoices.map((voice) => (
+                      <option key={voice.id} value={voice.id}>{voice.label}</option>
+                    ))}
+                  </select>
+                </label>
+              ) : null}
+
               <label>
                 Speed {speechRate.toFixed(2)}x
                 <input
                   type="range"
-                  min={0.75}
-                  max={1.5}
+                  min={0.8}
+                  max={1.2}
                   step={0.05}
                   value={speechRate}
                   onChange={(event) => setSpeechRate(Number(event.target.value))}
@@ -247,6 +267,33 @@ export function MiniPlayer(): React.ReactElement {
                   value={crossfadeDurationMs}
                   onChange={(event) => setCrossfadeDurationMs(Number(event.target.value))}
                 />
+              </label>
+
+              <label>
+                Repeat
+                <div className="engine-selector">
+                  <button
+                    type="button"
+                    className={`mini-tab ${repeatMode === "off" ? "is-active" : ""}`}
+                    onClick={() => setRepeatMode("off")}
+                  >
+                    Off
+                  </button>
+                  <button
+                    type="button"
+                    className={`mini-tab ${repeatMode === "chapter" ? "is-active" : ""}`}
+                    onClick={() => setRepeatMode("chapter")}
+                  >
+                    Chapter
+                  </button>
+                  <button
+                    type="button"
+                    className={`mini-tab ${repeatMode === "playlist" ? "is-active" : ""}`}
+                    onClick={() => setRepeatMode("playlist")}
+                  >
+                    Playlist
+                  </button>
+                </div>
               </label>
             </div>
 

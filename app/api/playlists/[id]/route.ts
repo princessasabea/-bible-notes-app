@@ -3,6 +3,7 @@ import { z } from "zod";
 import { execute, query } from "@/lib/db";
 import { requireUserId } from "@/lib/auth-user";
 import { assertSameOrigin, sanitizeText } from "@/lib/security";
+import { getPlaylistColumnMap } from "@/lib/playlists/columns";
 
 type PlaylistRow = {
   id: string;
@@ -18,6 +19,12 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
   try {
     assertSameOrigin(request);
     const userId = await requireUserId();
+    const columns = await getPlaylistColumnMap();
+    const playlistsUserColumn = `"${columns.playlistsUser}"`;
+    const playlistsCreatedColumn = `"${columns.playlistsCreated}"`;
+    const playlistsUpdatedSet = columns.playlistsUpdated
+      ? `, "${columns.playlistsUpdated}" = now()`
+      : "";
     const { id } = await context.params;
     const payload = await request.json();
     const parsed = patchSchema.safeParse(payload);
@@ -28,10 +35,9 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
 
     const [updated] = await query<PlaylistRow>(
       `UPDATE playlists
-       SET name = $1,
-           updated_at = now()
-       WHERE id = $2 AND user_id = $3
-       RETURNING id, name, created_at`,
+       SET name = $1${playlistsUpdatedSet}
+       WHERE id = $2 AND ${playlistsUserColumn} = $3
+       RETURNING id, name, ${playlistsCreatedColumn} AS created_at`,
       [parsed.data.name, id, userId]
     );
 
@@ -64,11 +70,13 @@ export async function DELETE(request: Request, context: { params: Promise<{ id: 
   try {
     assertSameOrigin(request);
     const userId = await requireUserId();
+    const columns = await getPlaylistColumnMap();
+    const playlistsUserColumn = `"${columns.playlistsUser}"`;
     const { id } = await context.params;
 
     const deleted = await execute(
       `DELETE FROM playlists
-       WHERE id = $1 AND user_id = $2`,
+       WHERE id = $1 AND ${playlistsUserColumn} = $2`,
       [id, userId]
     );
 

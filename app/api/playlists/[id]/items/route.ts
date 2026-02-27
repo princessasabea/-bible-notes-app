@@ -3,7 +3,9 @@ import { randomUUID } from "node:crypto";
 import { z } from "zod";
 import { query } from "@/lib/db";
 import { requireUserId } from "@/lib/auth-user";
+import { BIBLE_BOOKS } from "@/lib/bible/books";
 import { assertSameOrigin, sanitizeText } from "@/lib/security";
+import { getPlaylistColumnMap } from "@/lib/playlists/columns";
 
 type PlaylistLookupRow = { id: string; user_id: string };
 
@@ -24,14 +26,43 @@ const createSchema = z.object({
   title: z.string().min(1).max(180).transform(sanitizeText)
 });
 
+const BOOK_CODE_BY_NAME = new Map(BIBLE_BOOKS.map((entry) => [entry.name.toLowerCase(), entry.code]));
+
+function toCanonicalRef(book: string, chapter: number): string {
+  const code = BOOK_CODE_BY_NAME.get(book.trim().toLowerCase());
+  if (!code) {
+    return `${book}.${chapter}`;
+  }
+  return `${code}.${chapter}`;
+}
+
 export async function POST(request: Request, context: { params: Promise<{ id: string }> }): Promise<Response> {
   try {
     assertSameOrigin(request);
     const userId = await requireUserId();
+    const columns = await getPlaylistColumnMap();
+    const playlistsUserColumn = `"${columns.playlistsUser}"`;
     const { id: playlistId } = await context.params;
 
+    if (!columns.itemsPlaylist) {
+      return NextResponse.json(
+        {
+          error: "Playlist schema mismatch.",
+          ...(process.env.NODE_ENV === "development" && {
+            debug: "missing_playlist_items_playlist_id_column"
+          })
+        },
+        { status: 500 }
+      );
+    }
+
+    const itemsPlaylistColumn = `"${columns.itemsPlaylist}"`;
+
     const [playlist] = await query<PlaylistLookupRow>(
-      `SELECT id, user_id FROM playlists WHERE id = $1 LIMIT 1`,
+      `SELECT id, ${playlistsUserColumn} AS user_id
+       FROM playlists
+       WHERE id = $1
+       LIMIT 1`,
       [playlistId]
     );
 
@@ -57,28 +88,77 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
       return NextResponse.json({ status: "invalid", issues: parsed.error.flatten() }, { status: 400 });
     }
 
-    const [nextPosition] = await query<{ position: number }>(
-      `SELECT COALESCE(MAX(position), 0) + 1 AS position
-       FROM playlist_items
-       WHERE playlist_id = $1`,
-      [playlistId]
+    let nextPosition = 1;
+    if (columns.itemsPosition) {
+      const [positionRow] = await query<{ position: number }>(
+        `SELECT COALESCE(MAX("${columns.itemsPosition}"), 0) + 1 AS position
+         FROM playlist_items
+         WHERE ${itemsPlaylistColumn} = $1`,
+        [playlistId]
+      );
+      nextPosition = positionRow?.position ?? 1;
+    }
+
+    const itemId = randomUUID();
+    const canonicalRef = toCanonicalRef(parsed.data.book, parsed.data.chapter);
+
+    const insertColumns: string[] = ["id", columns.itemsPlaylist];
+    const insertValues: unknown[] = [itemId, playlistId];
+
+    if (columns.itemsUser) {
+      insertColumns.push(columns.itemsUser);
+      insertValues.push(userId);
+    }
+    if (columns.itemsTranslation) {
+      insertColumns.push(columns.itemsTranslation);
+      insertValues.push(parsed.data.translation);
+    }
+    if (columns.itemsBook) {
+      insertColumns.push(columns.itemsBook);
+      insertValues.push(parsed.data.book);
+    }
+    if (columns.itemsChapter) {
+      insertColumns.push(columns.itemsChapter);
+      insertValues.push(parsed.data.chapter);
+    }
+    if (columns.itemsTitle) {
+      insertColumns.push(columns.itemsTitle);
+      insertValues.push(parsed.data.title);
+    }
+    if (columns.itemsCanonicalRef) {
+      insertColumns.push(columns.itemsCanonicalRef);
+      insertValues.push(canonicalRef);
+    }
+    if (columns.itemsVerseStart) {
+      insertColumns.push(columns.itemsVerseStart);
+      insertValues.push(1);
+    }
+    if (columns.itemsVerseEnd) {
+      insertColumns.push(columns.itemsVerseEnd);
+      insertValues.push(999);
+    }
+    if (columns.itemsPosition) {
+      insertColumns.push(columns.itemsPosition);
+      insertValues.push(nextPosition);
+    }
+
+    const insertSqlColumns = insertColumns.map((column) => `"${column}"`).join(", ");
+    const insertSqlValues = insertValues.map((_, index) => `$${index + 1}`).join(", ");
+    await query(
+      `INSERT INTO playlist_items (${insertSqlColumns})
+       VALUES (${insertSqlValues})`,
+      insertValues
     );
 
-    const [created] = await query<PlaylistItemRow>(
-      `INSERT INTO playlist_items (id, playlist_id, user_id, translation, book, chapter, title, position)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-       RETURNING id, playlist_id, translation, book, chapter, title, position`,
-      [
-        randomUUID(),
-        playlistId,
-        userId,
-        parsed.data.translation,
-        parsed.data.book,
-        parsed.data.chapter,
-        parsed.data.title,
-        nextPosition.position
-      ]
-    );
+    const created: PlaylistItemRow = {
+      id: itemId,
+      playlist_id: playlistId,
+      translation: parsed.data.translation,
+      book: parsed.data.book,
+      chapter: parsed.data.chapter,
+      title: parsed.data.title,
+      position: nextPosition
+    };
 
     return NextResponse.json({ item: created }, { status: 201 });
   } catch (error) {
