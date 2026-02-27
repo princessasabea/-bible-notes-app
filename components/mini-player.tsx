@@ -1,20 +1,12 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useFilteredVoices, useQueue } from "@/components/queue-context";
 
 const aiVoices = [
   { id: "alloy", label: "Alloy (Natural)" },
   { id: "verse", label: "Verse (Warm)" }
 ];
-
-const MIN_PLAYER_HEIGHT = 88;
-const DEFAULT_PLAYER_HEIGHT = 320;
-const MAX_PLAYER_HEIGHT = 640;
-
-function clamp(value: number, min: number, max: number): number {
-  return Math.max(min, Math.min(max, value));
-}
 
 function formatDate(timestamp: number): string {
   return new Date(timestamp).toLocaleDateString(undefined, {
@@ -77,10 +69,6 @@ export function MiniPlayer(): React.ReactElement {
   const [activeTab, setActiveTab] = useState<"queue" | "playlists">("queue");
   const [chapterVerseCount, setChapterVerseCount] = useState(0);
   const [selectedPlaylistId, setSelectedPlaylistId] = useState<string | null>(null);
-  const [sheetHeight, setSheetHeight] = useState(DEFAULT_PLAYER_HEIGHT);
-  const [maxSheetHeight, setMaxSheetHeight] = useState(MAX_PLAYER_HEIGHT);
-
-  const dragRef = useRef<{ startY: number; startHeight: number; dragging: boolean } | null>(null);
 
   const activeItem = queue[currentIndex] ?? null;
   const title = currentChapterTitle ?? activeItem?.title ?? "Queue idle";
@@ -118,87 +106,23 @@ export function MiniPlayer(): React.ReactElement {
   }, [chapterVerseCount, currentVerse, queue.length, currentIndex, isPlaying]);
 
   useEffect(() => {
-    const resolveMaxHeight = (): number => {
-      return Math.min(MAX_PLAYER_HEIGHT, Math.floor(window.innerHeight * 0.72));
-    };
-
-    const onResize = (): void => {
-      const nextMax = resolveMaxHeight();
-      setMaxSheetHeight(nextMax);
-      setSheetHeight((current) => clamp(current, MIN_PLAYER_HEIGHT, nextMax));
-    };
-
-    onResize();
-    window.addEventListener("resize", onResize);
-    return () => window.removeEventListener("resize", onResize);
-  }, []);
+    if (playlistModalOpen) {
+      setActiveTab("playlists");
+      setIsExpanded(true);
+      setPlaylistModalOpen(false);
+    }
+  }, [playlistModalOpen, setPlaylistModalOpen]);
 
   useEffect(() => {
-    if (!playlistModalOpen) {
-      return;
-    }
-    setActiveTab("playlists");
-    setIsExpanded(true);
-    setSheetHeight((current) => clamp(Math.max(current, DEFAULT_PLAYER_HEIGHT), MIN_PLAYER_HEIGHT, maxSheetHeight));
-  }, [playlistModalOpen, maxSheetHeight]);
-
-  const toggleExpanded = (): void => {
-    setIsExpanded((current) => {
-      const next = !current;
-      if (next) {
-        setSheetHeight((height) => clamp(height, MIN_PLAYER_HEIGHT, maxSheetHeight));
-      }
-      return next;
-    });
-  };
-
-  const startResize = (clientY: number): void => {
-    if (!isExpanded) {
-      setIsExpanded(true);
-    }
-    dragRef.current = {
-      startY: clientY,
-      startHeight: sheetHeight,
-      dragging: true
-    };
-  };
-
-  const moveResize = (clientY: number): void => {
-    const state = dragRef.current;
-    if (!state?.dragging) {
+    if (playlists.length === 0) {
+      setSelectedPlaylistId(null);
       return;
     }
 
-    const deltaY = state.startY - clientY;
-    const nextHeight = state.startHeight + deltaY;
-    setSheetHeight(clamp(nextHeight, MIN_PLAYER_HEIGHT, maxSheetHeight));
-  };
-
-  const endResize = (): void => {
-    const state = dragRef.current;
-    if (!state) {
-      return;
+    if (!selectedPlaylistId || !playlists.some((entry) => entry.id === selectedPlaylistId)) {
+      setSelectedPlaylistId(playlists[0]?.id ?? null);
     }
-    state.dragging = false;
-
-    if (sheetHeight < 160) {
-      setIsExpanded(false);
-      setSheetHeight(clamp(DEFAULT_PLAYER_HEIGHT, MIN_PLAYER_HEIGHT, maxSheetHeight));
-    }
-  };
-
-  const handlePointerDown = (event: React.PointerEvent<HTMLDivElement>): void => {
-    event.currentTarget.setPointerCapture?.(event.pointerId);
-    startResize(event.clientY);
-  };
-
-  const handlePointerMove = (event: React.PointerEvent<HTMLDivElement>): void => {
-    moveResize(event.clientY);
-  };
-
-  const handlePointerUp = (): void => {
-    endResize();
-  };
+  }, [playlists, selectedPlaylistId]);
 
   const handleDeletePlaylist = (playlistId: string, playlistTitle: string): void => {
     const ok = window.confirm(`Delete \"${playlistTitle}\"? This removes all chapters in it.`);
@@ -213,407 +137,324 @@ export function MiniPlayer(): React.ReactElement {
     }
   };
 
-  const resolvedHeight = isExpanded ? clamp(sheetHeight, MIN_PLAYER_HEIGHT, maxSheetHeight) : MIN_PLAYER_HEIGHT;
+  const cycleRepeatMode = (): void => {
+    if (repeatMode === "off") {
+      setRepeatMode("playlist");
+      return;
+    }
+
+    if (repeatMode === "playlist") {
+      setRepeatMode("chapter");
+      return;
+    }
+
+    setRepeatMode("off");
+  };
+
+  const repeatLabel = repeatMode === "off"
+    ? "Repeat Off"
+    : repeatMode === "playlist"
+      ? "Repeat Playlist"
+      : "Repeat Chapter";
 
   return (
     <>
-      <section
-        className={`mini-player-sheet ${isExpanded ? "expanded" : "collapsed"} ${playlistModalOpen ? "is-shrunk" : ""}`}
-        role="region"
-        aria-label="Audio player"
-        style={{ height: resolvedHeight }}
-      >
-        <div className="mini-player-header-row">
-          <button
-            type="button"
-            className="mini-player-chevron"
-            onClick={toggleExpanded}
-            aria-label={isExpanded ? "Collapse player" : "Expand player"}
-          >
-            {isExpanded ? "▾" : "▴"}
-          </button>
+      <section className={`mini-apple-shell ${isExpanded ? "is-expanded" : "is-collapsed"}`} role="region" aria-label="Now Playing">
+        <button
+          type="button"
+          className="mini-apple-handle"
+          onClick={() => setIsExpanded((current) => !current)}
+          aria-label={isExpanded ? "Collapse player" : "Expand player"}
+        >
+          <span className="mini-apple-handle-pill" />
+        </button>
 
-          <button
-            type="button"
-            className="mini-player-summary"
-            onClick={toggleExpanded}
-            aria-label={isExpanded ? "Collapse player" : "Expand player"}
-          >
-            <span className="mini-collapsed-title">🎧 {title}</span>
-            <span className="mini-collapsed-meta">
-              {currentVerse ? `Verse ${currentVerse}` : queueCountLabel}
-            </span>
-          </button>
+        <div className="mini-apple-collapsed-row">
+          <div className="mini-apple-artwork" aria-hidden="true" />
 
-          <div className="mini-player-header-right">
-            <span className={`eq ${isPlaying && !isPaused ? "is-active" : ""}`} aria-hidden="true">
-              <i />
-              <i />
-              <i />
-            </span>
-            <div
-              className="mini-player-grabber"
-              onPointerDown={handlePointerDown}
-              onPointerMove={handlePointerMove}
-              onPointerUp={handlePointerUp}
-              role="slider"
-              aria-valuemin={MIN_PLAYER_HEIGHT}
-              aria-valuemax={maxSheetHeight}
-              aria-valuenow={resolvedHeight}
-              tabIndex={0}
-              title="Drag to resize"
-            >
-              <div className="mini-player-pill" />
+          <div className="mini-apple-meta">
+            <div className="mini-collapsed-title">{title}</div>
+            <div className="mini-collapsed-meta">{currentVerse ? `Verse ${currentVerse}` : queueCountLabel}</div>
+            <div className="mini-apple-progress">
+              <div className="mini-apple-progress-fill" style={{ width: `${Math.max(0, Math.min(100, progress))}%` }} />
             </div>
           </div>
+          <div className="mini-apple-controls-inline">
+            <IconButton label="Previous" onClick={playPrevious} disabled={currentIndex <= 0 || queue.length === 0}>⏮</IconButton>
+            <button
+              type="button"
+              className="mini-apple-big-play"
+              onClick={() => {
+                if (!isPlaying) {
+                  primeSpeechFromUserGesture();
+                  if (queue.length > 0) {
+                    void playFromCurrent();
+                  } else if (nowViewingItem) {
+                    void playChapterNow(nowViewingItem);
+                  } else {
+                    void playNowViewing();
+                  }
+                  return;
+                }
+                togglePause();
+              }}
+              disabled={queue.length === 0 && !nowViewingItem}
+              aria-label={isPlaying && !isPaused ? "Pause" : "Play"}
+            >
+              {isPlaying && !isPaused ? "⏸" : "▶"}
+            </button>
+            <IconButton label="Next" onClick={playNext} disabled={currentIndex >= queue.length - 1 || queue.length === 0}>⏭</IconButton>
+            <IconButton label={isExpanded ? "Collapse" : "Expand"} onClick={() => setIsExpanded((current) => !current)}>
+              {isExpanded ? "▾" : "▴"}
+            </IconButton>
+          </div>
         </div>
-
-        <div className="mini-player-body" style={{ overflowY: isExpanded ? "auto" : "hidden" }}>
-          {isExpanded ? (
-            <>
-              <div className="progress-bar" aria-hidden="true">
-                <div className="progress-fill" style={{ width: `${progress}%` }} />
+        {isExpanded ? (
+          <div className="mini-apple-expanded">
+            <div className="mini-apple-now-playing">
+              <div className="mini-apple-artwork mini-apple-artwork-large" aria-hidden="true" />
+              <div className="mini-apple-now-playing-meta">
+                <h3>{title}</h3>
+                <p>{currentVerse ? `Verse ${currentVerse}` : queueCountLabel}</p>
               </div>
+              <button
+                type="button"
+                className={`mini-apple-repeat-pill ${repeatMode === "off" ? "" : "is-active"}`}
+                onClick={cycleRepeatMode}
+                aria-label={repeatLabel}
+                title={repeatLabel}
+              >
+                {repeatMode === "off" ? "Repeat" : repeatMode === "playlist" ? "Repeat All" : "Repeat Chapter"}
+              </button>
+            </div>
 
-              <div className="mini-controls">
-                <button type="button" className="icon-btn" onClick={playPrevious} disabled={currentIndex <= 0 || queue.length === 0}>⏮</button>
-                {!isPlaying ? (
+            <div className="mini-apple-transport">
+              <CircleButton label="Previous" onClick={playPrevious} disabled={currentIndex <= 0 || queue.length === 0}>⏮</CircleButton>
+              <button
+                type="button"
+                className="mini-apple-transport-play"
+                onClick={() => {
+                  if (!isPlaying) {
+                    primeSpeechFromUserGesture();
+                    if (queue.length > 0) {
+                      void playFromCurrent();
+                    } else if (nowViewingItem) {
+                      void playChapterNow(nowViewingItem);
+                    } else {
+                      void playNowViewing();
+                    }
+                    return;
+                  }
+                  togglePause();
+                }}
+                disabled={queue.length === 0 && !nowViewingItem}
+                aria-label={isPlaying && !isPaused ? "Pause" : "Play"}
+              >
+                {isPlaying && !isPaused ? "⏸" : "▶"}
+              </button>
+              <CircleButton label="Next" onClick={playNext} disabled={currentIndex >= queue.length - 1 || queue.length === 0}>⏭</CircleButton>
+              <CircleButton label="Stop" onClick={stop} disabled={!isPlaying && !isPaused}>⏹</CircleButton>
+            </div>
+
+            <div className="mini-apple-cards">
+              <ControlCard label={`Speed ${speechRate.toFixed(2)}x`}>
+                <input
+                  type="range"
+                  min={0.8}
+                  max={1.2}
+                  step={0.05}
+                  value={speechRate}
+                  onChange={(event) => setSpeechRate(Number(event.target.value))}
+                />
+              </ControlCard>
+              <ControlCard label={`Crossfade ${crossfadeDurationMs}ms`}>
+                <input
+                  type="range"
+                  min={100}
+                  max={1500}
+                  step={50}
+                  value={crossfadeDurationMs}
+                  onChange={(event) => setCrossfadeDurationMs(Number(event.target.value))}
+                />
+              </ControlCard>
+            </div>
+
+            <div className="mini-apple-voice-grid">
+              <label>
+                Voice Engine
+                <div className="engine-selector">
                   <button
                     type="button"
-                    className="icon-btn icon-btn-primary"
-                    onClick={() => {
-                      primeSpeechFromUserGesture();
-                      if (queue.length > 0) {
-                        void playFromCurrent();
-                      } else if (nowViewingItem) {
-                        void playChapterNow(nowViewingItem);
-                      } else {
-                        void playNowViewing();
-                      }
-                    }}
-                    disabled={queue.length === 0 && !nowViewingItem}
+                    className={`mini-tab ${ttsEngine === "browser" ? "is-active" : ""}`}
+                    onClick={() => setTtsEngine("browser")}
                   >
-                    ▶
+                    Device
                   </button>
-                ) : (
-                  <button type="button" className={`icon-btn icon-btn-primary ${!isPaused ? "is-pulsing" : ""}`} onClick={togglePause}>
-                    {isPaused ? "▶" : "⏯"}
+                  <button
+                    type="button"
+                    className={`mini-tab ${ttsEngine === "openai" ? "is-active" : ""}`}
+                    onClick={() => setTtsEngine("openai")}
+                  >
+                    AI
                   </button>
-                )}
-                <button type="button" className="icon-btn" onClick={stop} disabled={!isPlaying && !isPaused}>⏹</button>
-                <button type="button" className="icon-btn" onClick={playNext} disabled={currentIndex >= queue.length - 1 || queue.length === 0}>⏭</button>
-              </div>
+                </div>
+              </label>
 
-              <div className="mini-settings">
-                <label>
-                  Voice Engine
-                  <div className="engine-selector">
-                    <button
-                      type="button"
-                      className={`mini-tab ${ttsEngine === "browser" ? "is-active" : ""}`}
-                      onClick={() => setTtsEngine("browser")}
-                    >
-                      🟢 Device Voice
-                    </button>
-                    <button
-                      type="button"
-                      className={`mini-tab ${ttsEngine === "openai" ? "is-active" : ""}`}
-                      onClick={() => setTtsEngine("openai")}
-                    >
-                      🔵 AI Voice
-                    </button>
-                  </div>
-                  <small className="status-text">
-                    {ttsEngine === "browser"
-                      ? "Uses your device voices (free/offline)."
-                      : "Uses OpenAI voice via API (premium quality)."}
-                  </small>
-                </label>
-
-                {ttsEngine === "browser" ? (
-                  <>
-                    <label>
-                      Voice
-                      <select value={selectedVoiceName} onChange={(event) => setSelectedVoiceName(event.target.value)}>
-                        <option value="">Auto (en-US)</option>
-                        {filteredVoices.map((voice) => (
-                          <option key={voice.name} value={voice.name}>{voice.name} ({voice.lang})</option>
-                        ))}
-                      </select>
-                    </label>
-
-                    <label className="checkbox-row">
-                      <input type="checkbox" checked={showAllVoices} onChange={(event) => setShowAllVoices(event.target.checked)} />
-                      <span>Show all voices</span>
-                    </label>
-
-                    {!showAllVoices ? (
-                      <label>
-                        Voice type
-                        <select value={voiceFilter} onChange={(event) => setVoiceFilter(event.target.value as "enhanced" | "premium")}>
-                          <option value="enhanced">Only Enhanced</option>
-                          <option value="premium">Only Premium</option>
-                        </select>
-                      </label>
-                    ) : null}
-                  </>
-                ) : null}
-
-                {ttsEngine === "openai" ? (
+              {ttsEngine === "browser" ? (
+                <>
                   <label>
-                    AI Voice
-                    <select value={aiVoiceId} onChange={(event) => setAiVoiceId(event.target.value)}>
-                      {aiVoices.map((voice) => (
-                        <option key={voice.id} value={voice.id}>{voice.label}</option>
+                    Voice
+                    <select value={selectedVoiceName} onChange={(event) => setSelectedVoiceName(event.target.value)}>
+                      <option value="">Auto (en-US)</option>
+                      {filteredVoices.map((voice) => (
+                        <option key={voice.name} value={voice.name}>{voice.name} ({voice.lang})</option>
                       ))}
                     </select>
                   </label>
-                ) : null}
 
+                  <label className="checkbox-row">
+                    <input type="checkbox" checked={showAllVoices} onChange={(event) => setShowAllVoices(event.target.checked)} />
+                    <span>Show all voices</span>
+                  </label>
+
+                  {!showAllVoices ? (
+                    <label>
+                      Voice type
+                      <select value={voiceFilter} onChange={(event) => setVoiceFilter(event.target.value as "enhanced" | "premium")}>
+                        <option value="enhanced">Enhanced</option>
+                        <option value="premium">Premium</option>
+                      </select>
+                    </label>
+                  ) : null}
+                </>
+              ) : (
                 <label>
-                  Speed {speechRate.toFixed(2)}x
-                  <input
-                    type="range"
-                    min={0.8}
-                    max={1.2}
-                    step={0.05}
-                    value={speechRate}
-                    onChange={(event) => setSpeechRate(Number(event.target.value))}
-                  />
+                  AI Voice
+                  <select value={aiVoiceId} onChange={(event) => setAiVoiceId(event.target.value)}>
+                    {aiVoices.map((voice) => (
+                      <option key={voice.id} value={voice.id}>{voice.label}</option>
+                    ))}
+                  </select>
                 </label>
+              )}
+            </div>
 
-                <label>
-                  Crossfade {crossfadeDurationMs}ms
-                  <input
-                    type="range"
-                    min={100}
-                    max={1500}
-                    step={50}
-                    value={crossfadeDurationMs}
-                    onChange={(event) => setCrossfadeDurationMs(Number(event.target.value))}
-                  />
-                </label>
+            <div className="mini-apple-segmented">
+              <button
+                type="button"
+                className={`mini-tab ${activeTab === "queue" ? "is-active" : ""}`}
+                onClick={() => setActiveTab("queue")}
+              >
+                Queue
+              </button>
+              <button
+                type="button"
+                className={`mini-tab ${activeTab === "playlists" ? "is-active" : ""}`}
+                onClick={() => setActiveTab("playlists")}
+              >
+                Playlists
+              </button>
+            </div>
 
-                <label>
-                  Repeat
-                  <div className="engine-selector">
+            <div className="mini-apple-pane">
+              {activeTab === "queue" ? (
+                <>
+                  <div className="queue-list">
+                    {queue.length === 0 ? <p className="status-text">Queue is empty.</p> : null}
+                    {queue.map((item, index) => (
+                      <div key={item.id} className={`queue-item ${index === currentIndex ? "is-current" : ""}`}>
+                        <button
+                          type="button"
+                          className="queue-item-main"
+                          onClick={() => {
+                            setCurrentIndex(index);
+                            void playFromIndex(index);
+                          }}
+                        >
+                          <strong>{item.title}</strong>
+                        </button>
+                        <div className="queue-item-actions">
+                          <button type="button" className="ghost-button" onClick={() => moveItem(index, Math.max(0, index - 1))} disabled={index === 0}>↑</button>
+                          <button type="button" className="ghost-button" onClick={() => moveItem(index, Math.min(queue.length - 1, index + 1))} disabled={index === queue.length - 1}>↓</button>
+                          <button type="button" className="danger-button" onClick={() => removeFromQueue(item.id)}>Remove</button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                  <div className="action-row">
+                    <button type="button" className="ghost-button" onClick={clearQueue} disabled={queue.length === 0}>Clear All</button>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div className="action-row">
+                    <input
+                      placeholder="Playlist name"
+                      value={playlistName}
+                      onChange={(event) => setPlaylistName(event.target.value)}
+                    />
                     <button
                       type="button"
-                      className={`mini-tab ${repeatMode === "off" ? "is-active" : ""}`}
-                      onClick={() => setRepeatMode("off")}
+                      onClick={() => {
+                        if (!playlistName.trim()) {
+                          return;
+                        }
+                        void (async () => {
+                          const createdId = await createPlaylist(playlistName);
+                          if (createdId) {
+                            setPlaylistName("");
+                          }
+                        })();
+                      }}
                     >
-                      Off
-                    </button>
-                    <button
-                      type="button"
-                      className={`mini-tab ${repeatMode === "chapter" ? "is-active" : ""}`}
-                      onClick={() => setRepeatMode("chapter")}
-                    >
-                      Chapter
-                    </button>
-                    <button
-                      type="button"
-                      className={`mini-tab ${repeatMode === "playlist" ? "is-active" : ""}`}
-                      onClick={() => setRepeatMode("playlist")}
-                    >
-                      Playlist
+                      Create
                     </button>
                   </div>
-                </label>
-              </div>
 
-              <div className="mini-tabs">
-                <button
-                  type="button"
-                  className={`mini-tab ${activeTab === "queue" ? "is-active" : ""}`}
-                  onClick={() => setActiveTab("queue")}
-                >
-                  Queue
-                </button>
-                <button
-                  type="button"
-                  className={`mini-tab ${activeTab === "playlists" ? "is-active" : ""}`}
-                  onClick={() => {
-                    setActiveTab("playlists");
-                    setPlaylistModalOpen(true);
-                  }}
-                >
-                  Playlists
-                </button>
-              </div>
-
-              <div className="mini-tab-panel">
-                {activeTab === "queue" ? (
-                  <>
-                    <div className="queue-list">
-                      {queue.length === 0 ? <p className="status-text">Queue is empty.</p> : null}
-                      {queue.map((item, index) => (
-                        <div key={item.id} className={`queue-item ${index === currentIndex ? "is-current" : ""}`}>
-                          <button
-                            type="button"
-                            className="queue-item-main"
-                            onClick={() => {
-                              setCurrentIndex(index);
-                              void playFromIndex(index);
-                            }}
-                          >
-                            <strong>{item.title}</strong>
-                          </button>
-                          <div className="queue-item-actions">
-                            <button type="button" className="ghost-button" onClick={() => moveItem(index, Math.max(0, index - 1))} disabled={index === 0}>↑</button>
-                            <button type="button" className="ghost-button" onClick={() => moveItem(index, Math.min(queue.length - 1, index + 1))} disabled={index === queue.length - 1}>↓</button>
-                            <button type="button" className="danger-button" onClick={() => removeFromQueue(item.id)}>Remove</button>
-                          </div>
+                  <div className="playlist-list">
+                    {playlists.length === 0 ? <p className="status-text">No saved playlists yet.</p> : null}
+                    {playlists.map((playlist) => (
+                      <div key={playlist.id} className={`playlist-item ${playlist.id === selectedPlaylist?.id ? "is-current" : ""}`}>
+                        <button
+                          type="button"
+                          className="queue-item-main"
+                          onClick={() => setSelectedPlaylistId(playlist.id)}
+                        >
+                          <strong>{playlist.name}</strong>
+                          <span>{playlist.chapters.length} chapters • {formatDate(playlist.createdAt)}</span>
+                        </button>
+                        <div className="queue-item-actions">
+                          <button type="button" className="ghost-button" onClick={() => void playPlaylist(playlist.id)}>Play</button>
+                          <button type="button" className="danger-button" onClick={() => handleDeletePlaylist(playlist.id, playlist.name)}>Delete</button>
                         </div>
+                      </div>
+                    ))}
+                  </div>
+
+                  {selectedPlaylist ? (
+                    <div className="playlist-chapter-list">
+                      {selectedPlaylist.chapters.map((chapterItem, index) => (
+                        <button
+                          type="button"
+                          key={`${chapterItem.id}-${index}`}
+                          className="playlist-track"
+                          onClick={() => {
+                            primeSpeechFromUserGesture();
+                            void playPlaylist(selectedPlaylist.id, { startIndex: index });
+                          }}
+                        >
+                          <span className="track-index">{index + 1}</span>
+                          <span className="track-title">{chapterItem.title}</span>
+                        </button>
                       ))}
                     </div>
-                    <div className="action-row">
-                      <button type="button" className="ghost-button" onClick={clearQueue} disabled={queue.length === 0}>Clear All</button>
-                    </div>
-                  </>
-                ) : (
-                  <>
-                    <div className="action-row">
-                      <input
-                        placeholder="Playlist name"
-                        value={playlistName}
-                        onChange={(event) => setPlaylistName(event.target.value)}
-                      />
-                      <button
-                        type="button"
-                        onClick={() => {
-                          if (!playlistName.trim()) {
-                            return;
-                          }
-                          void (async () => {
-                            const createdId = await createPlaylist(playlistName);
-                            if (createdId) {
-                              setPlaylistName("");
-                            }
-                          })();
-                        }}
-                      >
-                        Create
-                      </button>
-                    </div>
-                    <div className="playlist-list">
-                      {playlists.length === 0 ? <p className="status-text">No saved playlists yet.</p> : null}
-                      {playlists.map((playlist) => (
-                        <div key={playlist.id} className="playlist-item">
-                          <div>
-                            <strong>{playlist.name}</strong>
-                            <p>{playlist.chapters.length} chapters • {formatDate(playlist.createdAt)}</p>
-                          </div>
-                          <div className="action-row">
-                            <button type="button" className="ghost-button" onClick={() => void playPlaylist(playlist.id)}>Play</button>
-                            <button type="button" className="danger-button" onClick={() => handleDeletePlaylist(playlist.id, playlist.name)}>Delete</button>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </>
-                )}
-              </div>
-
-              {statusMessage ? <p className="status-text">{statusMessage}</p> : null}
-            </>
-          ) : null}
-        </div>
-      </section>
-
-      <div className={`playlist-screen ${playlistModalOpen ? "is-open" : ""}`} aria-hidden={!playlistModalOpen}>
-        <div className="playlist-screen-inner">
-          <div className="playlist-screen-top">
-            <button
-              type="button"
-              className="ghost-button"
-              onClick={() => setPlaylistModalOpen(false)}
-            >
-              Done
-            </button>
-          </div>
-
-          <div className="playlist-cover">
-            <div className="playlist-cover-art" />
-            <h2>{selectedPlaylist?.name ?? "My Playlist"}</h2>
-            <p>
-              {(selectedPlaylist?.chapters.length ?? 0)} Chapters {"•"}{" "}
-              {Math.max(1, Math.round(((selectedPlaylist?.chapters.length ?? 0) * 12) / 60))}h{" "}
-              {((selectedPlaylist?.chapters.length ?? 0) * 12) % 60}m
-            </p>
-            <div className="playlist-cover-actions">
-              <button
-                type="button"
-                className="player-button"
-                onClick={() => {
-                  if (!selectedPlaylist) {
-                    return;
-                  }
-                  primeSpeechFromUserGesture();
-                  void playPlaylist(selectedPlaylist.id);
-                  setPlaylistModalOpen(false);
-                }}
-              >
-                ▶ Play
-              </button>
-              <button
-                type="button"
-                className="ghost-button"
-                onClick={() => {
-                  if (!selectedPlaylist) {
-                    return;
-                  }
-                  primeSpeechFromUserGesture();
-                  void playPlaylist(selectedPlaylist.id, { shuffle: true });
-                  setPlaylistModalOpen(false);
-                }}
-              >
-                Shuffle
-              </button>
-              {selectedPlaylist ? (
-                <button
-                  type="button"
-                  className="danger-button"
-                  onClick={() => handleDeletePlaylist(selectedPlaylist.id, selectedPlaylist.name)}
-                >
-                  Delete
-                </button>
-              ) : null}
+                  ) : null}
+                </>
+              )}
             </div>
           </div>
-
-          <div className="playlist-picker">
-            {playlists.map((playlist) => (
-              <button
-                key={playlist.id}
-                type="button"
-                className={`mini-tab ${selectedPlaylist?.id === playlist.id ? "is-active" : ""}`}
-                onClick={() => setSelectedPlaylistId(playlist.id)}
-              >
-                {playlist.name}
-              </button>
-            ))}
-          </div>
-
-          <div className="playlist-chapter-list">
-            {selectedPlaylist?.chapters.map((chapterItem, index) => (
-              <button
-                type="button"
-                key={`${chapterItem.id}-${index}`}
-                className="playlist-track"
-                onClick={() => {
-                  primeSpeechFromUserGesture();
-                  void playPlaylist(selectedPlaylist.id, { startIndex: index });
-                  setPlaylistModalOpen(false);
-                }}
-              >
-                <span className="track-index">{index + 1}</span>
-                <span className="track-title">{chapterItem.title}</span>
-              </button>
-            )) ?? <p className="status-text">No playlists yet.</p>}
-          </div>
-        </div>
-      </div>
+        ) : null}
+      </section>
 
       {statusMessage && !isExpanded ? (
         <div className="mini-toast">
@@ -621,5 +462,70 @@ export function MiniPlayer(): React.ReactElement {
         </div>
       ) : null}
     </>
+  );
+}
+
+function IconButton({
+  label,
+  onClick,
+  children,
+  disabled
+}: {
+  label: string;
+  onClick: () => void;
+  children: React.ReactNode;
+  disabled?: boolean;
+}): React.ReactElement {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="mini-apple-icon-btn"
+      aria-label={label}
+      title={label}
+      disabled={disabled}
+    >
+      {children}
+    </button>
+  );
+}
+
+function CircleButton({
+  label,
+  onClick,
+  children,
+  disabled
+}: {
+  label: string;
+  onClick: () => void;
+  children: React.ReactNode;
+  disabled?: boolean;
+}): React.ReactElement {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="mini-apple-circle-btn"
+      aria-label={label}
+      title={label}
+      disabled={disabled}
+    >
+      {children}
+    </button>
+  );
+}
+
+function ControlCard({
+  label,
+  children
+}: {
+  label: string;
+  children: React.ReactNode;
+}): React.ReactElement {
+  return (
+    <div className="mini-apple-control-card">
+      <p>{label}</p>
+      {children}
+    </div>
   );
 }

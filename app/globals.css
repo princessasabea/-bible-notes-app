@@ -1290,6 +1290,235 @@ button:active,
   gap: 0.6rem;
 }
 
+.mini-apple-shell {
+  position: fixed;
+  left: 50%;
+  bottom: 10px;
+  transform: translateX(-50%);
+  width: min(96vw, 860px);
+  border-radius: 24px;
+  border: 1px solid rgba(176, 152, 122, 0.55);
+  background: rgba(252, 248, 240, 0.98);
+  backdrop-filter: blur(12px);
+  box-shadow: 0 20px 70px rgba(0, 0, 0, 0.18);
+  overflow: hidden;
+  z-index: 80;
+}
+
+.mini-apple-shell.is-collapsed {
+  height: 78px;
+}
+
+.mini-apple-shell.is-expanded {
+  height: min(72vh, 560px);
+}
+
+.mini-apple-handle {
+  width: 100%;
+  padding: 0.35rem 0 0.25rem;
+  border: 0;
+  background: transparent;
+}
+
+.mini-apple-handle-pill {
+  display: block;
+  width: 46px;
+  height: 6px;
+  margin: 0 auto;
+  border-radius: 999px;
+  background: rgba(110, 84, 50, 0.25);
+}
+
+.mini-apple-collapsed-row {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 0.65rem;
+  padding: 0 0.85rem 0.72rem;
+}
+
+.mini-apple-artwork {
+  width: 48px;
+  height: 48px;
+  border-radius: 16px;
+  background: linear-gradient(135deg, #e8dbc5, #d4bea1);
+  border: 1px solid rgba(176, 152, 122, 0.45);
+}
+
+.mini-apple-artwork-large {
+  width: 56px;
+  height: 56px;
+  border-radius: 18px;
+}
+
+.mini-apple-meta {
+  min-width: 0;
+}
+
+.mini-apple-progress {
+  margin-top: 0.4rem;
+  height: 3px;
+  border-radius: 999px;
+  background: #e4d9c7;
+  overflow: hidden;
+}
+
+.mini-apple-progress-fill {
+  height: 100%;
+  border-radius: 999px;
+  background: #645041;
+}
+
+.mini-apple-controls-inline {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+}
+
+.mini-apple-icon-btn {
+  width: 38px;
+  height: 38px;
+  border-radius: 999px;
+  border: 1px solid rgba(176, 152, 122, 0.55);
+  background: rgba(255, 255, 255, 0.72);
+  color: #2f251c;
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.08);
+}
+
+.mini-apple-big-play {
+  width: 44px;
+  height: 44px;
+  border-radius: 999px;
+  border: 0;
+  background: #2f251c;
+  color: #fff;
+  font-size: 1rem;
+}
+
+.mini-apple-circle-btn {
+  width: 46px;
+  height: 46px;
+  border-radius: 999px;
+  border: 1px solid rgba(176, 152, 122, 0.55);
+  background: rgba(255, 255, 255, 0.72);
+  color: #2f251c;
+}
+
+.mini-apple-expanded {
+  height: calc(100% - 78px);
+  border-top: 1px solid rgba(176, 152, 122, 0.35);
+  display: flex;
+  flex-direction: column;
+  padding: 0.7rem 0.9rem 0.8rem;
+  gap: 0.7rem;
+}
+
+.mini-apple-now-playing {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 0.7rem;
+}
+
+.mini-apple-now-playing-meta h3 {
+  margin: 0;
+  font-size: 1rem;
+}
+
+.mini-apple-now-playing-meta p {
+  margin: 0.15rem 0 0;
+  font-size: 0.8rem;
+  color: var(--muted);
+}
+
+.mini-apple-repeat-pill {
+  border-radius: 999px;
+  padding: 0.35rem 0.65rem;
+  font-size: 0.75rem;
+  border: 1px solid rgba(176, 152, 122, 0.55);
+  background: rgba(255, 255, 255, 0.72);
+  color: #5a4737;
+}
+
+.mini-apple-repeat-pill.is-active {
+  background: #2f251c;
+  border-color: #2f251c;
+  color: #fff;
+}
+
+.mini-apple-transport {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 0.7rem;
+}
+
+.mini-apple-transport-play {
+  width: 58px;
+  height: 58px;
+  border-radius: 999px;
+  border: 0;
+  background: #2f251c;
+  color: #fff;
+  font-size: 1.2rem;
+  box-shadow: 0 8px 18px rgba(0, 0, 0, 0.22);
+}
+
+.mini-apple-cards {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.65rem;
+}
+
+.mini-apple-control-card {
+  border-radius: 16px;
+  border: 1px solid rgba(176, 152, 122, 0.5);
+  background: rgba(255, 255, 255, 0.64);
+  padding: 0.55rem 0.7rem;
+}
+
+.mini-apple-control-card p {
+  margin: 0 0 0.45rem;
+  font-size: 0.76rem;
+  color: #5a4737;
+}
+
+.mini-apple-control-card input[type="range"] {
+  width: 100%;
+}
+
+.mini-apple-voice-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0.65rem;
+}
+
+.mini-apple-voice-grid label {
+  font-size: 0.8rem;
+}
+
+.mini-apple-segmented {
+  border-radius: 999px;
+  border: 1px solid rgba(176, 152, 122, 0.5);
+  background: rgba(255, 255, 255, 0.68);
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.25rem;
+  padding: 0.25rem;
+}
+
+.mini-apple-pane {
+  min-height: 0;
+  flex: 1;
+  overflow: auto;
+  border-radius: 16px;
+  border: 1px solid rgba(176, 152, 122, 0.45);
+  background: rgba(255, 255, 255, 0.62);
+  padding: 0.65rem;
+  display: grid;
+  gap: 0.65rem;
+}
+
 .mini-toast {
   position: fixed;
   left: 50%;
