@@ -1675,6 +1675,47 @@ button:active,
   .mini-player-sheet .mini-settings {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
+
+  .mini-apple-shell {
+    width: calc(100vw - 12px);
+    bottom: 6px;
+    border-radius: 18px;
+  }
+
+  .mini-apple-collapsed-row {
+    grid-template-columns: auto minmax(0, 1fr);
+    grid-template-areas:
+      "art controls"
+      "meta meta";
+    align-items: start;
+    row-gap: 0.45rem;
+  }
+
+  .mini-apple-artwork {
+    grid-area: art;
+  }
+
+  .mini-apple-meta {
+    grid-area: meta;
+  }
+
+  .mini-apple-controls-inline {
+    grid-area: controls;
+    justify-self: end;
+  }
+
+  .mini-apple-expanded {
+    gap: 0.55rem;
+    padding: 0.6rem 0.65rem 0.7rem;
+  }
+
+  .mini-apple-cards {
+    grid-template-columns: 1fr;
+  }
+
+  .mini-apple-voice-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
 }
 
 .journal-home {
