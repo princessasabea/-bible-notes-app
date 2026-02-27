@@ -40,6 +40,39 @@ type ChapterResponse =
   | { status: "unavailable"; message: string }
   | { status: "invalid"; issues?: unknown };
 
+const HEADING_CLASS_HINTS = [
+  "s1",
+  "s2",
+  "s3",
+  "s4",
+  "ms",
+  "mt",
+  "mte",
+  "mt1",
+  "mt2",
+  "sp",
+  "qa",
+  "d",
+  "heading",
+  "title",
+  "subhead"
+];
+
+function isHeadingElement(element: HTMLElement): boolean {
+  const tag = element.tagName.toLowerCase();
+  if (/^h[1-6]$/.test(tag)) {
+    return true;
+  }
+
+  const className = element.className.toLowerCase();
+  if (!className) {
+    return false;
+  }
+
+  const tokens = className.split(/\s+/).filter(Boolean);
+  return tokens.some((token) => HEADING_CLASS_HINTS.includes(token));
+}
+
 type QueueContextValue = {
   queue: QueueItem[];
   currentIndex: number;
@@ -168,6 +201,10 @@ function parseVersesFromHtml(chapterHtml: string): VerseLine[] {
     for (const node of Array.from(paragraph.childNodes)) {
       if (node.nodeType === Node.ELEMENT_NODE) {
         const elementNode = node as HTMLElement;
+        if (isHeadingElement(elementNode)) {
+          continue;
+        }
+
         const tagName = elementNode.tagName.toLowerCase();
         if (tagName === "sup") {
           const numeric = Number((elementNode.textContent ?? "").replace(/\D+/g, ""));
@@ -231,7 +268,12 @@ function parseVersesFromPlainText(content: string): VerseLine[] {
 }
 
 function cleanForSpeech(html: string, verseNumber?: number): string {
-  let cleaned = html
+  const withoutHeadings = html
+    // Remove heading elements before text cleanup so they are never spoken.
+    .replace(/<h[1-6][^>]*>[\s\S]*?<\/h[1-6]>/gi, " ")
+    .replace(/<(span|div|p)[^>]*class="[^"]*(?:\bs[1-4]\b|\bms\b|\bmt\b|\bmte\b|\bsp\b|\bqa\b|\bheading\b|\btitle\b)[^"]*"[^>]*>[\s\S]*?<\/\1>/gi, " ");
+
+  let cleaned = withoutHeadings
     // Remove verse numbers in <sup> tags
     .replace(/<sup[^>]*>\s*\d+\s*<\/sup>/gi, "")
     // Remove cross references like [Dan 12:1; Rev 3:5]
