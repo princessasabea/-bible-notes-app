@@ -1487,8 +1487,63 @@ button:active,
 
 .mini-apple-controls-row {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 0.75rem;
+}
+
+.mini-apple-voice-pill {
+  border-radius: 999px;
+  padding: 0.55rem 1rem;
+  font-size: 0.84rem;
+  border: 0;
+  background: rgba(255, 255, 255, 0.82);
+  color: #4d3b2c;
+  box-shadow: 0 6px 14px rgba(37, 26, 15, 0.08);
+}
+
+.mini-apple-voice-pill.is-active {
+  background: #3a2c21;
+  color: #fff;
+}
+
+.mini-apple-voice-panel {
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.84);
+  box-shadow: inset 0 0 0 1px rgba(176, 152, 122, 0.25);
+  padding: 0.75rem;
+  display: grid;
+  gap: 0.65rem;
+}
+
+.mini-apple-engine-toggle {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.5rem;
+}
+
+.mini-apple-engine-btn {
+  border-radius: 999px;
+  border: 0;
+  background: rgba(241, 232, 218, 0.8);
+  color: #4e3f30;
+  padding: 0.5rem 0.7rem;
+  font-size: 0.82rem;
+}
+
+.mini-apple-engine-btn.is-active {
+  background: #3a2c21;
+  color: #fff;
+}
+
+.mini-apple-voice-label {
+  display: grid;
+  gap: 0.35rem;
+  font-size: 0.8rem;
+  color: #6b5947;
+}
+
+.mini-apple-voice-label select {
+  width: 100%;
 }
 
 .mini-toast {

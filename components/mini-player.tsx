@@ -1,9 +1,13 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { useQueue } from "@/components/queue-context";
+import { useFilteredVoices, useQueue } from "@/components/queue-context";
 
 const SPEED_PRESETS = [0.85, 0.95, 1, 1.1, 1.2] as const;
+const AI_VOICES = [
+  { id: "alloy", label: "Alloy" },
+  { id: "verse", label: "Verse" }
+] as const;
 
 function extractTranslationFromTitle(value: string): string | null {
   const match = value.match(/\(([^)]+)\)\s*$/);
@@ -36,6 +40,9 @@ export function MiniPlayer(): React.ReactElement {
     isPaused,
     speechRate,
     repeatMode,
+    ttsEngine,
+    selectedVoiceName,
+    aiVoiceId,
     statusMessage,
     playFromCurrent,
     playChapterNow,
@@ -45,10 +52,15 @@ export function MiniPlayer(): React.ReactElement {
     togglePause,
     setSpeechRate,
     setRepeatMode,
+    setTtsEngine,
+    setSelectedVoiceName,
+    setAiVoiceId,
     primeSpeechFromUserGesture
   } = useQueue();
 
+  const filteredVoices = useFilteredVoices();
   const [isExpanded, setIsExpanded] = useState(false);
+  const [showVoicePicker, setShowVoicePicker] = useState(false);
   const [chapterVerseCount, setChapterVerseCount] = useState(0);
 
   const activeItem = queue[currentIndex] ?? nowViewingItem ?? null;
@@ -62,6 +74,10 @@ export function MiniPlayer(): React.ReactElement {
   const subtitle = currentVerse && currentVerse > 0
     ? `${translation} • Verse ${currentVerse}`
     : `${translation} • ${queuePosition}`;
+  const activeAiVoice = AI_VOICES.find((voice) => voice.id === aiVoiceId) ?? AI_VOICES[0];
+  const voiceLabel = ttsEngine === "openai"
+    ? `AI: ${activeAiVoice.label}`
+    : `Device: ${selectedVoiceName || "Auto"}`;
 
   useEffect(() => {
     const updateVerseCount = (): void => {
@@ -73,6 +89,12 @@ export function MiniPlayer(): React.ReactElement {
     const timer = window.setTimeout(updateVerseCount, 250);
     return () => window.clearTimeout(timer);
   }, [currentIndex, currentChapterTitle]);
+
+  useEffect(() => {
+    if (!isExpanded) {
+      setShowVoicePicker(false);
+    }
+  }, [isExpanded]);
 
   const progress = useMemo(() => {
     if (chapterVerseCount > 0 && currentVerse && currentVerse > 0) {
@@ -206,7 +228,66 @@ export function MiniPlayer(): React.ReactElement {
               >
                 Speed {speechRate.toFixed(2)}x
               </button>
+
+              <button
+                type="button"
+                className={`mini-apple-voice-pill ${showVoicePicker ? "is-active" : ""}`}
+                onClick={() => setShowVoicePicker((current) => !current)}
+                aria-label={`Voice ${voiceLabel}`}
+                title={voiceLabel}
+              >
+                Voice
+              </button>
             </div>
+
+            {showVoicePicker ? (
+              <div className="mini-apple-voice-panel">
+                <div className="mini-apple-engine-toggle" role="group" aria-label="Voice engine">
+                  <button
+                    type="button"
+                    className={`mini-apple-engine-btn ${ttsEngine === "browser" ? "is-active" : ""}`}
+                    onClick={() => setTtsEngine("browser")}
+                  >
+                    Device
+                  </button>
+                  <button
+                    type="button"
+                    className={`mini-apple-engine-btn ${ttsEngine === "openai" ? "is-active" : ""}`}
+                    onClick={() => setTtsEngine("openai")}
+                  >
+                    AI
+                  </button>
+                </div>
+
+                {ttsEngine === "browser" ? (
+                  <label className="mini-apple-voice-label">
+                    Device Voice
+                    <select
+                      value={selectedVoiceName}
+                      onChange={(event) => setSelectedVoiceName(event.target.value)}
+                    >
+                      <option value="">Auto (en-US)</option>
+                      {filteredVoices.map((voice, index) => (
+                        <option key={`${voice.name}-${voice.lang}-${index}`} value={voice.name}>
+                          {voice.name} ({voice.lang})
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                ) : (
+                  <label className="mini-apple-voice-label">
+                    AI Voice
+                    <select value={aiVoiceId} onChange={(event) => setAiVoiceId(event.target.value)}>
+                      {AI_VOICES.map((voice) => (
+                        <option key={voice.id} value={voice.id}>
+                          {voice.label}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                )}
+              </div>
+            ) : null}
           </div>
         ) : null}
       </section>
