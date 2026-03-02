@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { randomUUID } from "node:crypto";
 import { z } from "zod";
-import { query } from "@/lib/db";
+import { execute, query } from "@/lib/db";
 import { requireUserId } from "@/lib/auth-user";
 import { BIBLE_BOOKS } from "@/lib/bible/books";
 import { assertSameOrigin, sanitizeText } from "@/lib/security";
@@ -24,6 +24,9 @@ const createSchema = z.object({
   book: z.string().min(1).max(60).transform(sanitizeText),
   chapter: z.number().int().min(1),
   title: z.string().min(1).max(180).transform(sanitizeText)
+});
+const deleteSchema = z.object({
+  itemId: z.string().min(1).max(128)
 });
 
 const BOOK_CODE_BY_NAME = new Map(BIBLE_BOOKS.map((entry) => [entry.name.toLowerCase(), entry.code]));
@@ -214,6 +217,119 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
     }
 
     console.error("playlist_item_post_failed", { error: String(error) });
+    return NextResponse.json(
+      {
+        error: "Internal server error",
+        ...(process.env.NODE_ENV === "development" && { debug: String(error) })
+      },
+      { status: 500 }
+    );
+  }
+}
+
+export async function DELETE(request: Request, context: { params: Promise<{ id: string }> }): Promise<Response> {
+  try {
+    assertSameOrigin(request);
+    const userId = await requireUserId();
+    const columns = await getPlaylistColumnMap();
+    const playlistsUserColumn = `"${columns.playlistsUser}"`;
+    const { id: playlistId } = await context.params;
+
+    if (!columns.itemsPlaylist) {
+      return NextResponse.json(
+        {
+          error: "Playlist schema mismatch.",
+          ...(process.env.NODE_ENV === "development" && {
+            debug: "missing_playlist_items_playlist_id_column"
+          })
+        },
+        { status: 500 }
+      );
+    }
+
+    const payload = await request.json();
+    const parsed = deleteSchema.safeParse(payload);
+    if (!parsed.success) {
+      return NextResponse.json({ status: "invalid", issues: parsed.error.flatten() }, { status: 400 });
+    }
+
+    const [playlist] = await query<PlaylistLookupRow>(
+      `SELECT id, ${playlistsUserColumn} AS user_id
+       FROM playlists
+       WHERE id = $1
+       LIMIT 1`,
+      [playlistId]
+    );
+
+    if (!playlist) {
+      return NextResponse.json({ error: "Playlist not found" }, { status: 404 });
+    }
+
+    if (playlist.user_id !== userId) {
+      return NextResponse.json(
+        {
+          error: "Playlist belongs to another account.",
+          ...(process.env.NODE_ENV === "development" && {
+            debug: { sessionUserId: userId, playlistUserId: playlist.user_id }
+          })
+        },
+        { status: 403 }
+      );
+    }
+
+    const itemsPlaylistColumn = `"${columns.itemsPlaylist}"`;
+    const where: string[] = ["id = $1", `${itemsPlaylistColumn} = $2`];
+    const params: unknown[] = [parsed.data.itemId, playlistId];
+
+    if (columns.itemsUser) {
+      where.push(`"${columns.itemsUser}" = $3`);
+      params.push(userId);
+    }
+
+    const deleted = await execute(
+      `DELETE FROM playlist_items
+       WHERE ${where.join(" AND ")}`,
+      params
+    );
+
+    if (deleted.rowCount === 0) {
+      return NextResponse.json({ error: "Playlist item not found" }, { status: 404 });
+    }
+
+    if (columns.itemsPosition) {
+      const rankParams: unknown[] = [playlistId];
+      let filter = `${itemsPlaylistColumn} = $1`;
+      if (columns.itemsUser) {
+        filter += " AND \"" + columns.itemsUser + "\" = $2";
+        rankParams.push(userId);
+      }
+
+      await execute(
+        `WITH ranked AS (
+           SELECT id,
+                  ROW_NUMBER() OVER (ORDER BY "${columns.itemsPosition}" ASC, id ASC) AS next_position
+           FROM playlist_items
+           WHERE ${filter}
+         )
+         UPDATE playlist_items AS target
+         SET "${columns.itemsPosition}" = ranked.next_position
+         FROM ranked
+         WHERE target.id = ranked.id`,
+        rankParams
+      );
+    }
+
+    return NextResponse.json({ ok: true });
+  } catch (error) {
+    if (String(error).includes("Unauthorized")) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    if (String(error).includes("Origin mismatch")) {
+      return NextResponse.json({ error: "Origin mismatch" }, { status: 403 });
+    }
+
+    console.error("playlist_item_delete_failed", { error: String(error) });
     return NextResponse.json(
       {
         error: "Internal server error",
