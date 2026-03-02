@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { useFilteredVoices, useQueue } from "@/components/queue-context";
+import { useQueue } from "@/components/queue-context";
 
 const SPEED_PRESETS = [0.85, 0.95, 1, 1.1, 1.2] as const;
 const AI_VOICES = [
@@ -41,6 +41,8 @@ export function MiniPlayer(): React.ReactElement {
     speechRate,
     repeatMode,
     ttsEngine,
+    voices,
+    voiceFilter,
     selectedVoiceName,
     aiVoiceId,
     statusMessage,
@@ -53,13 +55,15 @@ export function MiniPlayer(): React.ReactElement {
     setSpeechRate,
     setRepeatMode,
     setTtsEngine,
+    setVoiceFilter,
+    setShowAllVoices,
     setSelectedVoiceName,
     setAiVoiceId,
     primeSpeechFromUserGesture
   } = useQueue();
 
-  const filteredVoices = useFilteredVoices();
   const [isExpanded, setIsExpanded] = useState(false);
+  const [showRepeatPicker, setShowRepeatPicker] = useState(false);
   const [showVoicePicker, setShowVoicePicker] = useState(false);
   const [chapterVerseCount, setChapterVerseCount] = useState(0);
 
@@ -78,6 +82,16 @@ export function MiniPlayer(): React.ReactElement {
   const voiceLabel = ttsEngine === "openai"
     ? `AI: ${activeAiVoice.label}`
     : `Device: ${selectedVoiceName || "Auto"}`;
+  const deviceVoices = useMemo(() => {
+    const keyword = voiceFilter === "premium" ? "premium" : "enhanced";
+    const filtered = voices.filter((voice) => voice.name.toLowerCase().includes(keyword));
+
+    if (filtered.length > 0) {
+      return filtered;
+    }
+
+    return voices;
+  }, [voiceFilter, voices]);
 
   useEffect(() => {
     const updateVerseCount = (): void => {
@@ -92,9 +106,25 @@ export function MiniPlayer(): React.ReactElement {
 
   useEffect(() => {
     if (!isExpanded) {
+      setShowRepeatPicker(false);
       setShowVoicePicker(false);
     }
   }, [isExpanded]);
+
+  useEffect(() => {
+    setShowAllVoices(false);
+  }, [setShowAllVoices]);
+
+  useEffect(() => {
+    if (!selectedVoiceName) {
+      return;
+    }
+
+    const exists = deviceVoices.some((voice) => voice.name === selectedVoiceName);
+    if (!exists) {
+      setSelectedVoiceName("");
+    }
+  }, [deviceVoices, selectedVoiceName, setSelectedVoiceName]);
 
   const progress = useMemo(() => {
     if (chapterVerseCount > 0 && currentVerse && currentVerse > 0) {
@@ -126,20 +156,6 @@ export function MiniPlayer(): React.ReactElement {
     }
 
     togglePause();
-  };
-
-  const cycleRepeatMode = (): void => {
-    if (repeatMode === "off") {
-      setRepeatMode("chapter");
-      return;
-    }
-
-    if (repeatMode === "chapter") {
-      setRepeatMode("playlist");
-      return;
-    }
-
-    setRepeatMode("off");
   };
 
   const repeatLabel = repeatMode === "off"
@@ -213,7 +229,10 @@ export function MiniPlayer(): React.ReactElement {
               <button
                 type="button"
                 className={`mini-apple-repeat-pill ${repeatMode === "off" ? "" : "is-active"}`}
-                onClick={cycleRepeatMode}
+                onClick={() => {
+                  setShowRepeatPicker((current) => !current);
+                  setShowVoicePicker(false);
+                }}
                 aria-label={repeatLabel}
                 title={repeatLabel}
               >
@@ -232,13 +251,42 @@ export function MiniPlayer(): React.ReactElement {
               <button
                 type="button"
                 className={`mini-apple-voice-pill ${showVoicePicker ? "is-active" : ""}`}
-                onClick={() => setShowVoicePicker((current) => !current)}
+                onClick={() => {
+                  setShowVoicePicker((current) => !current);
+                  setShowRepeatPicker(false);
+                }}
                 aria-label={`Voice ${voiceLabel}`}
                 title={voiceLabel}
               >
                 Voice
               </button>
             </div>
+
+            {showRepeatPicker ? (
+              <div className="mini-apple-repeat-panel">
+                <button
+                  type="button"
+                  className={`mini-apple-repeat-option ${repeatMode === "off" ? "is-active" : ""}`}
+                  onClick={() => setRepeatMode("off")}
+                >
+                  Do not repeat
+                </button>
+                <button
+                  type="button"
+                  className={`mini-apple-repeat-option ${repeatMode === "chapter" ? "is-active" : ""}`}
+                  onClick={() => setRepeatMode("chapter")}
+                >
+                  Repeat Chapter
+                </button>
+                <button
+                  type="button"
+                  className={`mini-apple-repeat-option ${repeatMode === "playlist" ? "is-active" : ""}`}
+                  onClick={() => setRepeatMode("playlist")}
+                >
+                  Repeat Playlist
+                </button>
+              </div>
+            ) : null}
 
             {showVoicePicker ? (
               <div className="mini-apple-voice-panel">
@@ -262,12 +310,28 @@ export function MiniPlayer(): React.ReactElement {
                 {ttsEngine === "browser" ? (
                   <label className="mini-apple-voice-label">
                     Device Voice
+                    <div className="mini-apple-engine-toggle" role="group" aria-label="Voice quality">
+                      <button
+                        type="button"
+                        className={`mini-apple-engine-btn ${voiceFilter === "enhanced" ? "is-active" : ""}`}
+                        onClick={() => setVoiceFilter("enhanced")}
+                      >
+                        Enhanced
+                      </button>
+                      <button
+                        type="button"
+                        className={`mini-apple-engine-btn ${voiceFilter === "premium" ? "is-active" : ""}`}
+                        onClick={() => setVoiceFilter("premium")}
+                      >
+                        Premium
+                      </button>
+                    </div>
                     <select
                       value={selectedVoiceName}
                       onChange={(event) => setSelectedVoiceName(event.target.value)}
                     >
                       <option value="">Auto (en-US)</option>
-                      {filteredVoices.map((voice, index) => (
+                      {deviceVoices.map((voice, index) => (
                         <option key={`${voice.name}-${voice.lang}-${index}`} value={voice.name}>
                           {voice.name} ({voice.lang})
                         </option>
