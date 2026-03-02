@@ -1310,7 +1310,7 @@ button:active,
 }
 
 .mini-apple-shell.is-expanded {
-  height: min(72vh, 560px);
+  height: min(74vh, 620px);
 }
 
 .mini-apple-handle {
@@ -1411,6 +1411,8 @@ button:active,
   flex-direction: column;
   padding: 0.7rem 0.9rem 0.8rem;
   gap: 0.7rem;
+  min-height: 0;
+  overflow: hidden;
 }
 
 .mini-apple-now-playing {
@@ -1517,6 +1519,89 @@ button:active,
   padding: 0.65rem;
   display: grid;
   gap: 0.65rem;
+}
+
+.mini-apple-popup-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 95;
+  background: rgba(33, 25, 16, 0.36);
+  backdrop-filter: blur(8px);
+  display: grid;
+  place-items: end center;
+  padding: 1rem;
+}
+
+.mini-apple-popup-card {
+  width: min(100%, 760px);
+  max-height: min(86vh, 760px);
+  border-radius: 28px 28px 18px 18px;
+  border: 1px solid rgba(176, 152, 122, 0.55);
+  background: linear-gradient(180deg, #f8ecda 0%, #fcf4e8 42%, #fff9f1 100%);
+  box-shadow: 0 28px 70px rgba(0, 0, 0, 0.24);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  animation: miniPlaylistIn 220ms ease;
+}
+
+@keyframes miniPlaylistIn {
+  from {
+    transform: translateY(24px);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+.mini-apple-popup-head {
+  display: flex;
+  justify-content: flex-end;
+  padding: 0.85rem 1rem 0.25rem;
+}
+
+.mini-apple-popup-cover-wrap {
+  display: grid;
+  justify-items: center;
+  gap: 0.45rem;
+  padding: 0.1rem 1rem 0.85rem;
+}
+
+.mini-apple-popup-cover {
+  width: 156px;
+  height: 156px;
+  border-radius: 20px;
+  background: linear-gradient(140deg, #9b6b42 0%, #c8a27a 52%, #eed8be 100%);
+  box-shadow: 0 16px 28px rgba(88, 58, 31, 0.25);
+}
+
+.mini-apple-popup-cover-wrap h3 {
+  margin: 0.15rem 0 0;
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: clamp(1.3rem, 2.8vw, 1.6rem);
+}
+
+.mini-apple-popup-cover-wrap p {
+  margin: 0;
+  color: #705c49;
+}
+
+.mini-apple-popup-actions {
+  display: flex;
+  gap: 0.55rem;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+.mini-apple-popup-list {
+  border-top: 1px solid rgba(176, 152, 122, 0.4);
+  padding: 0.7rem 0.85rem 1rem;
+  display: grid;
+  gap: 0.45rem;
+  overflow: auto;
+  min-height: 0;
 }
 
 .mini-toast {
@@ -1715,6 +1800,21 @@ button:active,
 
   .mini-apple-voice-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .mini-apple-popup-backdrop {
+    padding: 0.4rem;
+  }
+
+  .mini-apple-popup-card {
+    width: 100%;
+    max-height: 90vh;
+    border-radius: 20px 20px 12px 12px;
+  }
+
+  .mini-apple-popup-cover {
+    width: 132px;
+    height: 132px;
   }
 }
 

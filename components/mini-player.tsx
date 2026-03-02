@@ -69,10 +69,12 @@ export function MiniPlayer(): React.ReactElement {
   const [activeTab, setActiveTab] = useState<"queue" | "playlists">("queue");
   const [chapterVerseCount, setChapterVerseCount] = useState(0);
   const [selectedPlaylistId, setSelectedPlaylistId] = useState<string | null>(null);
+  const [popupPlaylistId, setPopupPlaylistId] = useState<string | null>(null);
 
   const activeItem = queue[currentIndex] ?? null;
   const title = currentChapterTitle ?? activeItem?.title ?? "Queue idle";
   const selectedPlaylist = playlists.find((entry) => entry.id === selectedPlaylistId) ?? playlists[0] ?? null;
+  const popupPlaylist = playlists.find((entry) => entry.id === popupPlaylistId) ?? null;
 
   const queueCountLabel = useMemo(() => {
     if (queue.length === 0) {
@@ -116,13 +118,28 @@ export function MiniPlayer(): React.ReactElement {
   useEffect(() => {
     if (playlists.length === 0) {
       setSelectedPlaylistId(null);
+      setPopupPlaylistId(null);
       return;
     }
 
     if (!selectedPlaylistId || !playlists.some((entry) => entry.id === selectedPlaylistId)) {
       setSelectedPlaylistId(playlists[0]?.id ?? null);
     }
-  }, [playlists, selectedPlaylistId]);
+    if (popupPlaylistId && !playlists.some((entry) => entry.id === popupPlaylistId)) {
+      setPopupPlaylistId(null);
+    }
+  }, [playlists, selectedPlaylistId, popupPlaylistId]);
+
+  useEffect(() => {
+    const handleEscape = (event: KeyboardEvent): void => {
+      if (event.key === "Escape") {
+        setPopupPlaylistId(null);
+      }
+    };
+
+    window.addEventListener("keydown", handleEscape);
+    return () => window.removeEventListener("keydown", handleEscape);
+  }, []);
 
   const handleDeletePlaylist = (playlistId: string, playlistTitle: string): void => {
     const ok = window.confirm(`Delete \"${playlistTitle}\"? This removes all chapters in it.`);
@@ -418,7 +435,10 @@ export function MiniPlayer(): React.ReactElement {
                         <button
                           type="button"
                           className="queue-item-main"
-                          onClick={() => setSelectedPlaylistId(playlist.id)}
+                          onClick={() => {
+                            setSelectedPlaylistId(playlist.id);
+                            setPopupPlaylistId(playlist.id);
+                          }}
                         >
                           <strong>{playlist.name}</strong>
                           <span>{playlist.chapters.length} chapters • {formatDate(playlist.createdAt)}</span>
@@ -455,6 +475,82 @@ export function MiniPlayer(): React.ReactElement {
           </div>
         ) : null}
       </section>
+
+      {popupPlaylist ? (
+        <div
+          className="mini-apple-popup-backdrop"
+          role="dialog"
+          aria-modal="true"
+          aria-label={`${popupPlaylist.name} playlist`}
+          onClick={() => setPopupPlaylistId(null)}
+        >
+          <section className="mini-apple-popup-card" onClick={(event) => event.stopPropagation()}>
+            <header className="mini-apple-popup-head">
+              <button type="button" className="ghost-button" onClick={() => setPopupPlaylistId(null)}>
+                Done
+              </button>
+            </header>
+
+            <div className="mini-apple-popup-cover-wrap">
+              <div className="mini-apple-popup-cover" aria-hidden="true" />
+              <h3>{popupPlaylist.name}</h3>
+              <p>{popupPlaylist.chapters.length} chapters</p>
+              <div className="mini-apple-popup-actions">
+                <button
+                  type="button"
+                  className="player-button"
+                  onClick={() => {
+                    primeSpeechFromUserGesture();
+                    void playPlaylist(popupPlaylist.id);
+                    setPopupPlaylistId(null);
+                  }}
+                >
+                  ▶ Play
+                </button>
+                <button
+                  type="button"
+                  className="ghost-button"
+                  onClick={() => {
+                    primeSpeechFromUserGesture();
+                    void playPlaylist(popupPlaylist.id, { shuffle: true });
+                    setPopupPlaylistId(null);
+                  }}
+                >
+                  Shuffle
+                </button>
+                <button
+                  type="button"
+                  className="danger-button"
+                  onClick={() => {
+                    handleDeletePlaylist(popupPlaylist.id, popupPlaylist.name);
+                    setPopupPlaylistId(null);
+                  }}
+                >
+                  Delete
+                </button>
+              </div>
+            </div>
+
+            <div className="mini-apple-popup-list">
+              {popupPlaylist.chapters.map((chapterItem, index) => (
+                <button
+                  type="button"
+                  key={`${chapterItem.id}-${index}`}
+                  className="playlist-track"
+                  onClick={() => {
+                    primeSpeechFromUserGesture();
+                    void playPlaylist(popupPlaylist.id, { startIndex: index });
+                    setPopupPlaylistId(null);
+                  }}
+                >
+                  <span className="track-index">{index + 1}</span>
+                  <span className="track-title">{chapterItem.title}</span>
+                </button>
+              ))}
+            </div>
+          </section>
+        </div>
+      ) : null}
 
       {statusMessage && !isExpanded ? (
         <div className="mini-toast">
