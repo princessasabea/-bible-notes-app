@@ -16,17 +16,31 @@ const pool = new Pool({
   }
 });
 
+const authSecret = process.env.AUTH_SECRET ?? process.env.NEXTAUTH_SECRET;
+const googleClientId = process.env.AUTH_GOOGLE_ID ?? process.env.GOOGLE_CLIENT_ID;
+const googleClientSecret = process.env.AUTH_GOOGLE_SECRET ?? process.env.GOOGLE_CLIENT_SECRET;
+
+if (!authSecret) {
+  throw new Error("AUTH_SECRET or NEXTAUTH_SECRET is required for auth");
+}
+
+if (!googleClientId || !googleClientSecret) {
+  throw new Error(
+    "Google auth is not configured. Set AUTH_GOOGLE_ID/AUTH_GOOGLE_SECRET or GOOGLE_CLIENT_ID/GOOGLE_CLIENT_SECRET."
+  );
+}
+
 export const { handlers, auth, signIn, signOut } = NextAuth({
   adapter: PostgresAdapter(pool),
 
   providers: [
     Google({
-      clientId: process.env.GOOGLE_CLIENT_ID!,
-      clientSecret: process.env.GOOGLE_CLIENT_SECRET!
+      clientId: googleClientId,
+      clientSecret: googleClientSecret
     })
   ],
 
-  secret: process.env.NEXTAUTH_SECRET,
+  secret: authSecret,
 
   session: {
     strategy: "database"
@@ -41,6 +55,12 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           id: user.id
         }
       };
+    }
+  },
+
+  logger: {
+    error(code, ...message) {
+      console.error("auth_error", code, ...message);
     }
   },
 
