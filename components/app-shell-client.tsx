@@ -8,10 +8,14 @@ export function AppShellClient({ children }: { children: React.ReactNode }): Rea
   const pathname = usePathname();
   const isAudioExperience = pathname.startsWith("/audio");
 
+  if (isAudioExperience) {
+    return <>{children}</>;
+  }
+
   return (
     <QueueProvider>
       {children}
-      {isAudioExperience ? null : <MiniPlayer />}
+      <MiniPlayer />
     </QueueProvider>
   );
 }

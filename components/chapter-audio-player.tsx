@@ -134,7 +134,8 @@ export function ChapterAudioPlayer({
   );
   const sourceLabel = audioSource === "firebase" ? "Cloud narration" : audioSource === "local" ? "Local narration" : "Narration unavailable";
   const chapterLabel = `${activeBook} ${activeChapter}`;
-  const folderHint = `${expectedFirebaseFolderPath}/`;
+  const expectedFirebasePath = expectedFirebaseManifestPath;
+  const missingAiMessage = `AI chapter audio for ${translation} ${activeBook} ${activeChapter} has not been uploaded yet.`;
   const generationCommand = `npm run audio:chapter -- --translation ${requestedTranslation} --book "${activeBook}" --chapter ${activeChapter} --input local-chapters/${requestedTranslation}/${slugify(activeBook)}/${activeChapter}.txt`;
   const progressKey = `chapter-audio:${requestedTranslation}:${slugify(activeBook)}:${activeChapter}`;
 
@@ -222,7 +223,7 @@ export function ChapterAudioPlayer({
         setMissingFiles(localMissingFiles);
         setAudioSource("none");
         setActiveMode("device");
-        setErrorMessage("Cloud narration is not uploaded yet, and no complete local chapter audio is available.");
+        setErrorMessage(missingAiMessage);
         setStatus("error");
       })
       .catch((error: unknown) => {
@@ -244,7 +245,7 @@ export function ChapterAudioPlayer({
           setManifest(null);
           setAudioSource("none");
           setActiveMode("device");
-          setErrorMessage("Cloud narration is not uploaded yet, and no complete local chapter audio is available.");
+          setErrorMessage(missingAiMessage);
           setStatus("error");
         }
       })
@@ -585,6 +586,7 @@ export function ChapterAudioPlayer({
     : activeMode === "ai"
       ? status === "playing" ? "Playing AI Voice" : status === "paused" ? "Paused" : status === "ended" ? "Finished" : aiReady ? "Ready" : "Needs upload"
       : deviceStatus === "playing" ? "Reading with Device Voice" : deviceStatus === "paused" ? "Paused" : deviceStatus === "loading" ? "Loading text" : "Device Voice";
+  const modeLine = activeMode === "ai" ? "AI Voice: generated MP3 chapter audio" : `Device Voice: ${chapterLabel}`;
 
   return (
     <div className="audio-page audio-listening-page">
@@ -605,8 +607,9 @@ export function ChapterAudioPlayer({
         </div>
 
         <div className="listen-title">
-          <p>{sourceLabel}</p>
+          <p>{translation} • Full Chapter Audio</p>
           <h2>{chapterLabel}</h2>
+          <span className="listen-source-line">{modeLine}</span>
         </div>
 
         <div className="listen-mode-toggle" role="tablist" aria-label="Audio mode">
@@ -616,14 +619,16 @@ export function ChapterAudioPlayer({
             onClick={() => switchMode("ai")}
             disabled={!aiReady && isResolvingAudioSource}
           >
-            AI Voice
+            <strong>AI Voice</strong>
+            <span>Generated chapter audio</span>
           </button>
           <button
             type="button"
             className={activeMode === "device" ? "is-active" : ""}
             onClick={() => switchMode("device")}
           >
-            Device Voice
+            <strong>Device Voice</strong>
+            <span>Browser/system voice</span>
           </button>
         </div>
 
@@ -767,9 +772,9 @@ export function ChapterAudioPlayer({
       {(!manifest || missingFiles.length > 0 || errorMessage || deviceError || (audioSource === "local" && firebaseErrorMessage)) ? (
         <section className="audio-message-band listen-missing-card" role="status">
           <h3>{manifest ? "Listening note" : "Upload chapter narration"}</h3>
-          <p>{deviceError ?? errorMessage ?? (audioSource === "local" && firebaseErrorMessage ? `Cloud narration was not available: ${firebaseErrorMessage}` : "Cloud narration is missing for this chapter.")}</p>
-          <p>Expected Firebase folder:</p>
-          <pre>{folderHint}</pre>
+          <p>{deviceError ?? errorMessage ?? (audioSource === "local" && firebaseErrorMessage ? `${missingAiMessage} Using local chapter audio fallback in development.` : missingAiMessage)}</p>
+          <p>Expected Firebase path:</p>
+          <pre>{expectedFirebasePath}</pre>
           <p>Local fallback checked <code>{attemptedPath}</code>.</p>
           <pre>{generationCommand}</pre>
         </section>

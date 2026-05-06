@@ -2513,6 +2513,11 @@ button:active,
   line-height: 0.95;
 }
 
+.listen-source-line {
+  color: rgba(255, 248, 236, 0.76);
+  font-size: 0.95rem;
+}
+
 .listen-mode-toggle {
   width: min(100%, 440px);
   margin: 0 auto;
@@ -2528,11 +2533,20 @@ button:active,
   background: transparent;
   color: rgba(255, 248, 236, 0.72);
   font-weight: 700;
+  display: grid;
+  gap: 0.08rem;
+  line-height: 1.2;
 }
 
 .listen-mode-toggle button.is-active {
   background: #f4d8a8;
   color: #172a27;
+}
+
+.listen-mode-toggle button span {
+  font-size: 0.72rem;
+  font-weight: 500;
+  opacity: 0.78;
 }
 
 .listen-progress-card {
