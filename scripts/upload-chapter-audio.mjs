@@ -224,6 +224,59 @@ async function verifyDownloadUrl(url, label, rangeCheck = false) {
   }
 }
 
+async function readExistingLibrary(bucket, translationSlug) {
+  const libraryPath = `${FIREBASE_AUDIO_ROOT}/${translationSlug}/library.json`;
+  try {
+    const [buffer] = await bucket.file(libraryPath).download();
+    const parsed = JSON.parse(buffer.toString("utf8"));
+    return {
+      translation: parsed.translation ?? translationSlug,
+      books: typeof parsed.books === "object" && parsed.books !== null ? parsed.books : {}
+    };
+  } catch (error) {
+    if (error.code === 404) {
+      return {
+        translation: translationSlug,
+        books: {}
+      };
+    }
+    throw error;
+  }
+}
+
+async function uploadLibraryIndex(bucket, translationSlug, bookSlug, chapter) {
+  const libraryPath = `${FIREBASE_AUDIO_ROOT}/${translationSlug}/library.json`;
+  const existing = await readExistingLibrary(bucket, translationSlug);
+  const chapters = new Set(
+    Array.isArray(existing.books[bookSlug])
+      ? existing.books[bookSlug].map((value) => Number(value)).filter((value) => Number.isInteger(value) && value > 0)
+      : []
+  );
+
+  chapters.add(Number(chapter));
+
+  const library = {
+    translation: translationSlug,
+    updatedAt: new Date().toISOString(),
+    books: {
+      ...existing.books,
+      [bookSlug]: [...chapters].sort((a, b) => a - b)
+    }
+  };
+
+  await uploadBuffer(
+    bucket,
+    Buffer.from(`${JSON.stringify(library, null, 2)}\n`, "utf8"),
+    libraryPath,
+    {
+      contentType: "application/json",
+      cacheControl: "no-cache"
+    }
+  );
+
+  return libraryPath;
+}
+
 async function main() {
   const options = parseArgs(process.argv.slice(2));
   await loadLocalEnv();
@@ -252,6 +305,7 @@ async function main() {
     for (const fileName of segmentFiles) {
       console.log(`[dry-run] ${path.join(audioDir, fileName)} -> ${firebaseChapterFolder}/audio/${fileName}`);
     }
+    console.log(`[dry-run] update ${FIREBASE_AUDIO_ROOT}/${translationSlug}/library.json with ${bookSlug} ${chapter}`);
     return;
   }
 
@@ -300,6 +354,8 @@ async function main() {
   for (const part of audioParts) {
     await verifyFirebaseObject(bucket, part.storagePath);
   }
+  const libraryPath = await uploadLibraryIndex(bucket, translationSlug, bookSlug, chapter);
+  await verifyFirebaseObject(bucket, libraryPath);
 
   if (!options.skipUrlCheck) {
     await verifyDownloadUrl(manifestUpload.url, "manifest.json");
@@ -309,6 +365,7 @@ async function main() {
   }
 
   console.log(`Uploaded ${firebaseManifestPath}`);
+  console.log(`Updated ${libraryPath}`);
   console.log("Verified Firebase files and download URLs.");
   console.log(`Test route: /audio/${bookSlug}/${chapter}?translation=${translationSlug}`);
 }

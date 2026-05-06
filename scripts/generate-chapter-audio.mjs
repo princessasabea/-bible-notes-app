@@ -2,6 +2,7 @@
 
 import fs from "node:fs/promises";
 import path from "node:path";
+import { cleanBibleTextForNarration } from "./narration-cleanup.mjs";
 
 const DEFAULT_MAX_CHARS = 4000;
 const DEFAULT_MODEL = "gpt-4o-mini-tts";
@@ -197,7 +198,8 @@ async function main() {
   await loadLocalEnv();
 
   const chapterText = await fs.readFile(options.input, "utf8");
-  const parts = splitText(chapterText, options.maxChars);
+  const narrationText = cleanBibleTextForNarration(chapterText, options.translation);
+  const parts = splitText(narrationText, options.maxChars);
   const bookSlug = slugify(options.book);
   const translationSlug = slugify(options.translation);
   const chapter = String(options.chapter);
@@ -244,6 +246,11 @@ async function main() {
     speed: options.speed,
     instructions: DEFAULT_INSTRUCTIONS,
     generatedAt: new Date().toISOString(),
+    preprocessing: {
+      cleanedForNarration: true,
+      sourceCharacterCount: chapterText.length,
+      narrationCharacterCount: narrationText.length
+    },
     audioParts
   };
 

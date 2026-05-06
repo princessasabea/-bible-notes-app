@@ -1,6 +1,6 @@
 import { getDownloadURL, ref } from "firebase/storage";
 import type { ChapterAudioManifest, ChapterAudioPart } from "@/lib/audio/chapter-audio";
-import { buildChapterManifestPath, buildChapterSegmentPath, slugifyAudioPath } from "@/lib/audio/storage-paths";
+import { FIREBASE_AUDIO_ROOT, buildChapterManifestPath, buildChapterSegmentPath, slugifyAudioPath } from "@/lib/audio/storage-paths";
 import { getFirebaseStorageClient, hasFirebaseConfig } from "@/lib/firebase";
 
 type FirebaseManifestPart = {
@@ -29,6 +29,19 @@ export type FirebaseChapterAudioResult = {
   manifest: ChapterAudioManifest | null;
   expectedManifestPath: string;
   expectedFolderPath: string;
+  errorMessage: string | null;
+};
+
+export type FirebaseAudioLibrary = {
+  translation: string;
+  updatedAt?: string;
+  books: Record<string, number[]>;
+};
+
+export type FirebaseAudioLibraryResult = {
+  library: FirebaseAudioLibrary | null;
+  expectedLibraryPath: string;
+  hasChapter: boolean;
   errorMessage: string | null;
 };
 
@@ -90,6 +103,68 @@ function getFirebaseStorageClientOrThrow() {
     throw new Error("Firebase config is missing.");
   }
   return storage;
+}
+
+export function buildFirebaseLibraryPath(translation: string): string {
+  return `${FIREBASE_AUDIO_ROOT}/${slugifyAudioPath(translation)}/library.json`;
+}
+
+export async function loadFirebaseAudioLibrary(
+  translation: string,
+  book?: string,
+  chapter?: number
+): Promise<FirebaseAudioLibraryResult> {
+  const translationSlug = slugifyAudioPath(translation);
+  const expectedLibraryPath = buildFirebaseLibraryPath(translationSlug);
+
+  if (!hasFirebaseConfig()) {
+    return {
+      library: null,
+      expectedLibraryPath,
+      hasChapter: false,
+      errorMessage: "Firebase config is missing from NEXT_PUBLIC_FIREBASE_* environment variables."
+    };
+  }
+
+  try {
+    const storage = getFirebaseStorageClientOrThrow();
+    const libraryUrl = await getDownloadURL(ref(storage, expectedLibraryPath));
+    const response = await fetch(libraryUrl, { cache: "no-store" });
+    if (!response.ok) {
+      throw new Error(`Library request failed (${response.status}).`);
+    }
+
+    const parsed: unknown = await response.json();
+    const object = isObject(parsed) ? parsed : {};
+    const books = isObject(object.books) ? object.books : {};
+    const normalizedBooks = Object.fromEntries(
+      Object.entries(books).map(([bookSlug, chapters]) => [
+        slugifyAudioPath(bookSlug),
+        Array.isArray(chapters)
+          ? chapters.map((value) => Number(value)).filter((value) => Number.isInteger(value) && value > 0).sort((a, b) => a - b)
+          : []
+      ])
+    );
+    const bookSlug = book ? slugifyAudioPath(book) : "";
+
+    return {
+      library: {
+        translation: typeof object.translation === "string" ? slugifyAudioPath(object.translation) : translationSlug,
+        updatedAt: typeof object.updatedAt === "string" ? object.updatedAt : undefined,
+        books: normalizedBooks
+      },
+      expectedLibraryPath,
+      hasChapter: Boolean(bookSlug && chapter && normalizedBooks[bookSlug]?.includes(chapter)),
+      errorMessage: null
+    };
+  } catch (error) {
+    return {
+      library: null,
+      expectedLibraryPath,
+      hasChapter: false,
+      errorMessage: error instanceof Error ? error.message : "Firebase audio library could not be loaded."
+    };
+  }
 }
 
 export async function loadFirebaseChapterAudioManifest(

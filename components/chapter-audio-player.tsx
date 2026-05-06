@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { BIBLE_BOOKS } from "@/lib/bible/books";
 import type { ChapterAudioManifest } from "@/lib/audio/chapter-audio";
-import { loadFirebaseChapterAudioManifest } from "@/lib/audio/firebase-chapter-audio";
+import { loadFirebaseAudioLibrary, loadFirebaseChapterAudioManifest } from "@/lib/audio/firebase-chapter-audio";
 import { buildChapterManifestPath } from "@/lib/audio/storage-paths";
 
 type Props = {
@@ -96,6 +96,8 @@ export function ChapterAudioPlayer({
   const [selectedChapter, setSelectedChapter] = useState(String(initialChapter));
   const [translation, setTranslation] = useState((localManifest?.translation ?? initialTranslation).toUpperCase());
   const [expectedFirebaseManifestPath, setExpectedFirebaseManifestPath] = useState(initialFirebaseManifestPath);
+  const [expectedFirebaseLibraryPath, setExpectedFirebaseLibraryPath] = useState(`bible-audio/${requestedTranslation.toLowerCase()}/library.json`);
+  const [libraryHasChapter, setLibraryHasChapter] = useState(false);
   const [isResolvingAudio, setIsResolvingAudio] = useState(true);
   const [status, setStatus] = useState<PlayerStatus>(localManifest ? "loading" : "idle");
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -163,13 +165,33 @@ export function ChapterAudioPlayer({
     setDurations([]);
     setErrorMessage(null);
     setExpectedFirebaseManifestPath(buildChapterManifestPath(requestedTranslation, initialBook, initialChapter));
+    setExpectedFirebaseLibraryPath(`bible-audio/${requestedTranslation.toLowerCase()}/library.json`);
+    setLibraryHasChapter(false);
     setIsResolvingAudio(true);
     setStatus("loading");
 
     let cancelled = false;
-    loadFirebaseChapterAudioManifest(displayBookFromSlug(initialBook), initialChapter, requestedTranslation)
-      .then((result) => {
+    loadFirebaseAudioLibrary(requestedTranslation, displayBookFromSlug(initialBook), initialChapter)
+      .then(async (libraryResult) => {
         if (cancelled) {
+          return null;
+        }
+
+        setExpectedFirebaseLibraryPath(libraryResult.expectedLibraryPath);
+        setLibraryHasChapter(libraryResult.hasChapter);
+        if (!libraryResult.hasChapter) {
+          return {
+            manifest: null,
+            expectedManifestPath: buildChapterManifestPath(requestedTranslation, initialBook, initialChapter),
+            expectedFolderPath: "",
+            errorMessage: libraryResult.errorMessage
+          };
+        }
+
+        return loadFirebaseChapterAudioManifest(displayBookFromSlug(initialBook), initialChapter, requestedTranslation);
+      })
+      .then((result) => {
+        if (cancelled || !result) {
           return;
         }
 
@@ -576,6 +598,8 @@ export function ChapterAudioPlayer({
           <dl>
             <dt>Expected Firebase path</dt>
             <dd><code>{expectedFirebaseManifestPath}</code></dd>
+            <dt>Library index</dt>
+            <dd><code>{expectedFirebaseLibraryPath}</code>{libraryHasChapter ? null : <span> This chapter is not listed yet.</span>}</dd>
             <dt>Generate</dt>
             <dd><pre>{generationCommand}</pre></dd>
             <dt>Upload</dt>

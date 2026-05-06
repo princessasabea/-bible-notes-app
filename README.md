@@ -28,6 +28,19 @@ If `npm install` fails with an error like `ENOTEMPTY: directory not empty, renam
 2. Reinstall from the lockfile:
    - `npm install`
 
+## Audio architecture
+
+The default listening architecture is pre-generated audio:
+
+```text
+OpenAI TTS generation once
+-> generated MP3 segments
+-> Firebase Storage upload
+-> app streams prepared narration instantly
+```
+
+The app should not call OpenAI when a user presses play. Playback reads the Firebase library index at `bible-audio/{translation}/library.json`, then streams the uploaded chapter manifest and MP3 segments from Firebase Storage. Live/on-demand OpenAI generation is intentionally disabled for now at `/api/audio/generate-on-demand`.
+
 ## Local chapter audio generation
 
 For personal chapter audio, keep copied Bible text outside git under `local-chapters/`.
@@ -45,6 +58,8 @@ Example for John 3:
    - `http://localhost:3000/audio/john/3?translation=amp`
 
 Generated files are written to `generated-audio/amp/john/3/` with `manifest.json` and `audio/segment-1.mp3`, `audio/segment-2.mp3`, and any remaining segments.
+
+Before OpenAI TTS is called, the generator cleans chapter text for narration only. The displayed scripture text is not changed. For AMP, cleanup removes verse numbers, footnote markers, section labels, and Bible-reference parentheses like `(Mark 8:9)`, while preserving explanatory AMP parentheses such as `(member of the Sanhedrin)` as natural spoken commas.
 
 To listen locally on macOS:
 
@@ -81,6 +96,7 @@ Firebase Storage folder structure:
 ```text
 bible-audio/
   amp/
+    library.json
     john/
       3/
         manifest.json
@@ -107,13 +123,28 @@ Manifest shape:
 }
 ```
 
+Library index shape:
+
+```json
+{
+  "translation": "amp",
+  "updatedAt": "2026-05-06T00:00:00.000Z",
+  "books": {
+    "john": [1, 2, 3, 4, 5],
+    "romans": [1, 2, 3]
+  }
+}
+```
+
+The app uses this index to decide whether a chapter has prepared AI narration. If a chapter is not listed, the player shows "Chapter narration is not ready yet" with the exact generate and upload commands.
+
 To upload John 3:
 
 1. Generate local audio:
    - `npm run audio:chapter -- --translation amp --book John --chapter 3 --input local-chapters/amp/john/3.txt`
 2. Upload the generated manifest and audio segments:
-   - `npm run audio:upload -- --translation amp --book John --chapter 3`
-3. The script verifies that `manifest.json` and every `audio/segment-*.mp3` file exists in Firebase Storage and that their download URLs are reachable.
+   - `npm run audio:upload -- --translation amp --book John --chapter 3 --service-account ./serviceAccountKey.json`
+3. The script verifies that `manifest.json` and every `audio/segment-*.mp3` file exists in Firebase Storage, verifies download URLs, and updates `bible-audio/amp/library.json`.
 4. Test:
    - `npm run dev`
    - `http://localhost:3000/audio/john/3?translation=amp`
@@ -168,8 +199,16 @@ The batch uploader:
 
 - uploads only generated chapters that have `manifest.json` and `audio/segment-*.mp3`
 - preserves the Firebase path structure under `bible-audio/{translation}/{book}/{chapter}/`
+- updates `bible-audio/{translation}/library.json` as each chapter uploads
 - verifies uploaded objects and download URLs
 - prints a summary at the end
+
+Verify the library in the app:
+
+1. Run `npm run dev`.
+2. Open `http://localhost:3000/audio/john/3?translation=amp`.
+3. If John 3 is listed in `bible-audio/amp/library.json`, the page shows the main chapter play button.
+4. If it is not listed, the page shows the generate/upload action card.
 
 To test NKJV instead, create `local-chapters/nkjv/john/3.txt`, then run:
 
@@ -177,14 +216,11 @@ To test NKJV instead, create `local-chapters/nkjv/john/3.txt`, then run:
 - `npm run audio:upload -- --translation nkjv --book John --chapter 3`
 - `http://localhost:3000/audio/john/3?translation=nkjv`
 
-To test AMPC instead, use `bible-audio/ampc/john/3/` and open:
-
-- `http://localhost:3000/audio/john/3?translation=ampc`
-
 ## Security and behavior
 
 - Postgres is source of truth.
 - IndexedDB is read cache only.
 - Offline mode is read-only.
 - TTS endpoint requires auth + rate limit.
-- Audio stored in Vercel Blob, metadata in Postgres.
+- Prepared chapter narration is stored in Firebase Storage.
+- OpenAI API keys, service account keys, local chapter text, and generated audio stay out of git.
