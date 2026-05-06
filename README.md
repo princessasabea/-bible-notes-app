@@ -52,6 +52,67 @@ To listen locally on macOS:
 
 To use AMPC instead, change both `amp` path segments and `--translation amp` to `ampc`.
 
+## Firebase Storage chapter audio
+
+The audio player tries Firebase Storage first and uses local `generated-audio/` files as a development fallback.
+
+Add these values to `.env.local` for local development:
+
+- `NEXT_PUBLIC_FIREBASE_API_KEY`
+- `NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN`
+- `NEXT_PUBLIC_FIREBASE_PROJECT_ID`
+- `NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET`
+- `NEXT_PUBLIC_FIREBASE_APP_ID`
+
+Add the same variables in Vercel under Project Settings -> Environment Variables. These are Firebase web config values and are okay to expose to the browser, but Firebase Storage rules should still protect access.
+
+Firebase Storage folder structure:
+
+```text
+bible-audio/
+  amp/
+    john/
+      3/
+        manifest.json
+        audio/
+          segment-1.mp3
+          segment-2.mp3
+```
+
+Manifest shape:
+
+```json
+{
+  "translation": "amp",
+  "book": "John",
+  "chapter": 3,
+  "audioParts": [
+    {
+      "part": 1,
+      "segment": 1,
+      "fileName": "segment-1.mp3",
+      "storagePath": "bible-audio/amp/john/3/audio/segment-1.mp3"
+    }
+  ]
+}
+```
+
+To upload John 3:
+
+1. Generate local audio:
+   - `npm run audio:chapter -- --translation amp --book John --chapter 3 --input local-chapters/amp/john/3.txt`
+2. In Firebase Console -> Storage, create `bible-audio/amp/john/3/`.
+3. Upload `generated-audio/amp/john/3/manifest.json`.
+4. Create `bible-audio/amp/john/3/audio/`.
+5. Upload `generated-audio/amp/john/3/audio/segment-1.mp3`, `segment-2.mp3`, and any remaining segments.
+6. Test:
+   - `npm run dev`
+   - `http://localhost:3000/audio/john/3?translation=amp`
+
+To test AMPC instead, use `bible-audio/ampc/john/3/` and open:
+
+- `http://localhost:3000/audio/john/3?translation=ampc`
+
 ## Security and behavior
 
 - Postgres is source of truth.

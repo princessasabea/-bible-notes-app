@@ -27,10 +27,15 @@ function parseRange(rangeHeader: string | null, size: number): { start: number; 
 
 export async function GET(
   request: Request,
-  { params }: { params: Promise<{ translation: string; book: string; chapter: string; file: string }> }
+  { params }: { params: Promise<{ translation: string; book: string; chapter: string; file: string[] }> }
 ): Promise<Response> {
   const resolved = await params;
-  const audioPath = resolveGeneratedAudioFile(resolved.translation, resolved.book, resolved.chapter, resolved.file);
+  const audioPath = resolveGeneratedAudioFile(
+    resolved.translation,
+    resolved.book,
+    resolved.chapter,
+    resolved.file.join("/")
+  );
 
   if (!audioPath) {
     return new Response("Invalid audio path", { status: 400 });

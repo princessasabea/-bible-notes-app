@@ -4,6 +4,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { BIBLE_BOOKS } from "@/lib/bible/books";
 import type { ChapterAudioManifest } from "@/lib/audio/chapter-audio";
+import { loadFirebaseChapterAudioManifest } from "@/lib/audio/firebase-chapter-audio";
+import { buildChapterAudioFolder, buildChapterManifestPath } from "@/lib/audio/storage-paths";
 
 type Props = {
   initialBook: string;
@@ -47,22 +49,31 @@ function sumDurations(durations: number[], endIndex: number): number {
 export function ChapterAudioPlayer({
   initialBook,
   initialChapter,
-  manifest,
-  missingFiles,
+  manifest: localManifest,
+  missingFiles: localMissingFiles,
   attemptedPath,
   requestedTranslation
 }: Props): React.ReactElement {
   const router = useRouter();
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const autoPlayRef = useRef(false);
+  const initialFirebaseManifestPath = buildChapterManifestPath(requestedTranslation, initialBook, initialChapter);
+  const initialFirebaseFolderPath = buildChapterAudioFolder(requestedTranslation, initialBook, initialChapter);
+  const [manifest, setManifest] = useState<ChapterAudioManifest | null>(localManifest);
+  const [missingFiles, setMissingFiles] = useState<string[]>(localMissingFiles);
+  const [audioSource, setAudioSource] = useState<"firebase" | "local" | "none">(localManifest ? "local" : "none");
+  const [firebaseErrorMessage, setFirebaseErrorMessage] = useState<string | null>(null);
+  const [expectedFirebaseManifestPath, setExpectedFirebaseManifestPath] = useState(initialFirebaseManifestPath);
+  const [expectedFirebaseFolderPath, setExpectedFirebaseFolderPath] = useState(initialFirebaseFolderPath);
+  const [isResolvingAudioSource, setIsResolvingAudioSource] = useState(true);
   const [selectedBook, setSelectedBook] = useState(displayBookFromSlug(initialBook));
   const [selectedChapter, setSelectedChapter] = useState(String(initialChapter));
-  const [translation, setTranslation] = useState((manifest?.translation ?? requestedTranslation).toUpperCase());
+  const [translation, setTranslation] = useState((localManifest?.translation ?? requestedTranslation).toUpperCase());
   const [partIndex, setPartIndex] = useState(0);
-  const [status, setStatus] = useState<PlayerStatus>(manifest ? "loading" : "error");
-  const [errorMessage, setErrorMessage] = useState<string | null>(manifest ? null : "No generated chapter manifest found.");
+  const [status, setStatus] = useState<PlayerStatus>(localManifest ? "loading" : "idle");
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [currentTime, setCurrentTime] = useState(0);
-  const [durations, setDurations] = useState<number[]>(() => manifest?.audioParts.map(() => Number.NaN) ?? []);
+  const [durations, setDurations] = useState<number[]>(() => localManifest?.audioParts.map(() => Number.NaN) ?? []);
 
   const activeBook = manifest?.book ?? displayBookFromSlug(initialBook);
   const activeChapter = manifest?.chapter ?? initialChapter;
@@ -85,6 +96,7 @@ export function ChapterAudioPlayer({
   );
 
   const generationCommand = `npm run audio:chapter -- --translation ${requestedTranslation} --book "${activeBook}" --chapter ${activeChapter} --input local-chapters/${requestedTranslation}/${slugify(activeBook)}/${activeChapter}.txt`;
+  const uploadHint = `${expectedFirebaseFolderPath}/manifest.json\n${expectedFirebaseFolderPath}/audio/segment-1.mp3\n${expectedFirebaseFolderPath}/audio/segment-2.mp3`;
 
   const loadPart = useCallback((index: number, shouldPlay: boolean): void => {
     const audio = audioRef.current;
@@ -104,13 +116,88 @@ export function ChapterAudioPlayer({
   useEffect(() => {
     setSelectedBook(displayBookFromSlug(initialBook));
     setSelectedChapter(String(initialChapter));
-    setTranslation((manifest?.translation ?? requestedTranslation).toUpperCase());
+    setTranslation((localManifest?.translation ?? requestedTranslation).toUpperCase());
     setPartIndex(0);
     setCurrentTime(0);
-    setDurations(manifest?.audioParts.map(() => Number.NaN) ?? []);
-    setErrorMessage(manifest ? null : "No generated chapter manifest found.");
-    setStatus(manifest ? "loading" : "error");
-  }, [initialBook, initialChapter, manifest, requestedTranslation]);
+    setDurations(localManifest?.audioParts.map(() => Number.NaN) ?? []);
+    setErrorMessage(null);
+    setFirebaseErrorMessage(null);
+    setExpectedFirebaseManifestPath(buildChapterManifestPath(requestedTranslation, initialBook, initialChapter));
+    setExpectedFirebaseFolderPath(buildChapterAudioFolder(requestedTranslation, initialBook, initialChapter));
+    setIsResolvingAudioSource(true);
+    setStatus("loading");
+
+    let cancelled = false;
+    loadFirebaseChapterAudioManifest(displayBookFromSlug(initialBook), initialChapter, requestedTranslation)
+      .then((result) => {
+        if (cancelled) {
+          return;
+        }
+
+        setExpectedFirebaseManifestPath(result.expectedManifestPath);
+        setExpectedFirebaseFolderPath(result.expectedFolderPath);
+
+        if (result.manifest) {
+          setManifest(result.manifest);
+          setMissingFiles([]);
+          setAudioSource("firebase");
+          setTranslation(result.manifest.translation.toUpperCase());
+          setDurations(result.manifest.audioParts.map(() => Number.NaN));
+          setErrorMessage(null);
+          setFirebaseErrorMessage(null);
+          setStatus("loading");
+          return;
+        }
+
+        setFirebaseErrorMessage(result.errorMessage);
+        if (localManifest && localMissingFiles.length === 0) {
+          setManifest(localManifest);
+          setMissingFiles(localMissingFiles);
+          setAudioSource("local");
+          setTranslation(localManifest.translation.toUpperCase());
+          setDurations(localManifest.audioParts.map(() => Number.NaN));
+          setErrorMessage(null);
+          setStatus("loading");
+          return;
+        }
+
+        setManifest(null);
+        setMissingFiles(localMissingFiles);
+        setAudioSource("none");
+        setErrorMessage("No Firebase chapter audio was found, and no complete local generated-audio fallback is available.");
+        setStatus("error");
+      })
+      .catch((error: unknown) => {
+        if (cancelled) {
+          return;
+        }
+
+        setFirebaseErrorMessage(error instanceof Error ? error.message : "Firebase chapter audio could not be loaded.");
+        if (localManifest && localMissingFiles.length === 0) {
+          setManifest(localManifest);
+          setMissingFiles(localMissingFiles);
+          setAudioSource("local");
+          setTranslation(localManifest.translation.toUpperCase());
+          setDurations(localManifest.audioParts.map(() => Number.NaN));
+          setErrorMessage(null);
+          setStatus("loading");
+        } else {
+          setManifest(null);
+          setAudioSource("none");
+          setErrorMessage("No Firebase chapter audio was found, and no complete local generated-audio fallback is available.");
+          setStatus("error");
+        }
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setIsResolvingAudioSource(false);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [initialBook, initialChapter, localManifest, localMissingFiles, requestedTranslation]);
 
   useEffect(() => {
     if (!manifest || audioParts.length === 0 || !audioRef.current || missingFiles.length > 0) {
@@ -297,7 +384,7 @@ export function ChapterAudioPlayer({
     router.push(`/audio/${bookSlug}/${chapter}?translation=${translationSlug}`);
   };
 
-  const playerSubtitle = `${translation} • ${audioParts.length || 0} audio ${audioParts.length === 1 ? "section" : "sections"}`;
+  const playerSubtitle = `${translation} • ${audioParts.length || 0} audio ${audioParts.length === 1 ? "segment" : "segments"} • ${audioSource === "firebase" ? "Firebase" : audioSource === "local" ? "Local" : "No source"}`;
 
   return (
     <div className="audio-page">
@@ -316,7 +403,7 @@ export function ChapterAudioPlayer({
           <div className="audio-player-main">
             <div className="audio-kicker-row">
               <span className="audio-kicker">Chapter Audio</span>
-              <span className={`audio-status-pill is-${status}`}>{status === "playing" ? "Playing" : status === "paused" ? "Paused" : status === "ended" ? "Complete" : status === "loading" ? "Loading" : status === "error" ? "Needs audio" : "Ready"}</span>
+              <span className={`audio-status-pill is-${status}`}>{isResolvingAudioSource ? "Finding audio" : status === "playing" ? "Playing" : status === "paused" ? "Paused" : status === "ended" ? "Complete" : status === "loading" ? "Loading" : status === "error" ? "Needs audio" : "Ready"}</span>
             </div>
 
             <div className="audio-title-block">
@@ -414,11 +501,13 @@ export function ChapterAudioPlayer({
         <button type="button" onClick={navigateToSelection}>Open Chapter</button>
       </section>
 
-      {(!manifest || missingFiles.length > 0 || errorMessage) ? (
+      {(!manifest || missingFiles.length > 0 || errorMessage || (audioSource === "local" && firebaseErrorMessage)) ? (
         <section className="audio-message-band" role="status">
-          <h3>{manifest && missingFiles.length > 0 ? "Audio files are missing" : manifest ? "Playback needs attention" : "Generate this chapter first"}</h3>
-          <p>{errorMessage ?? `Missing: ${missingFiles.join(", ")}`}</p>
-          <p>The player looked for <code>{attemptedPath}</code>.</p>
+          <h3>{manifest && missingFiles.length > 0 ? "Audio files are missing" : manifest ? "Using local fallback" : "Upload or generate this chapter first"}</h3>
+          <p>{errorMessage ?? (audioSource === "local" && firebaseErrorMessage ? `Firebase was not available: ${firebaseErrorMessage}` : `Missing: ${missingFiles.join(", ")}`)}</p>
+          <p>Firebase Storage should contain:</p>
+          <pre>{uploadHint}</pre>
+          <p>Local fallback checked <code>{attemptedPath}</code>.</p>
           <pre>{generationCommand}</pre>
         </section>
       ) : null}

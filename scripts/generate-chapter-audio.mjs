@@ -201,19 +201,23 @@ async function main() {
   const bookSlug = slugify(options.book);
   const translationSlug = slugify(options.translation);
   const chapter = String(options.chapter);
-  const outputDir = path.join(options.out, translationSlug, bookSlug, chapter);
+  const chapterDir = path.join(options.out, translationSlug, bookSlug, chapter);
+  const outputDir = path.join(chapterDir, "audio");
 
   await fs.mkdir(outputDir, { recursive: true });
 
   const audioParts = [];
   for (let index = 0; index < parts.length; index += 1) {
-    const fileName = `part-${index + 1}.mp3`;
+    const fileName = `segment-${index + 1}.mp3`;
     const outputPath = path.join(outputDir, fileName);
-    const publicUrl = `/api/generated-audio/${translationSlug}/${bookSlug}/${chapter}/${fileName}`;
+    const publicUrl = `/api/generated-audio/${translationSlug}/${bookSlug}/${chapter}/audio/${fileName}`;
+    const storagePath = `bible-audio/${translationSlug}/${bookSlug}/${chapter}/audio/${fileName}`;
     audioParts.push({
       part: index + 1,
+      segment: index + 1,
       fileName,
       path: outputPath,
+      storagePath,
       url: publicUrl
     });
 
@@ -243,7 +247,7 @@ async function main() {
     audioParts
   };
 
-  const manifestPath = path.join(outputDir, "manifest.json");
+  const manifestPath = path.join(chapterDir, "manifest.json");
   await fs.writeFile(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`);
   console.log(`Saved ${manifestPath}`);
 }

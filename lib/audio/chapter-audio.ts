@@ -1,11 +1,14 @@
 import fs from "node:fs/promises";
 import path from "node:path";
+import { slugifyAudioPath } from "@/lib/audio/storage-paths";
 
 export type ChapterAudioPart = {
   part: number;
   fileName: string;
   path: string;
   url: string;
+  storagePath?: string;
+  source?: "local" | "firebase";
 };
 
 export type ChapterAudioManifest = {
@@ -29,14 +32,6 @@ export type ChapterAudioLoadResult = {
 
 const AUDIO_ROOT = path.resolve(process.cwd(), "generated-audio");
 
-function slugify(value: string): string {
-  return value
-    .toLowerCase()
-    .replace(/&/g, "and")
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "");
-}
-
 function toDisplayBook(value: string): string {
   return value
     .split("-")
@@ -50,24 +45,31 @@ function isObject(value: unknown): value is Record<string, unknown> {
 }
 
 function normalizePart(value: unknown, index: number, translation: string, book: string, chapter: number): ChapterAudioPart | null {
-  const bookSlug = slugify(book);
+  const bookSlug = slugifyAudioPath(book);
   const fileName = isObject(value)
     ? String(value.fileName ?? path.basename(String(value.path ?? value.url ?? "")))
     : path.basename(String(value));
 
-  if (!/^part-\d+\.mp3$/i.test(fileName)) {
+  if (!/^(part|segment)-\d+\.mp3$/i.test(fileName)) {
     return null;
   }
 
   const localPath = isObject(value) && typeof value.path === "string"
     ? value.path
-    : path.join("generated-audio", translation, bookSlug, String(chapter), fileName);
+    : fileName.startsWith("segment-")
+      ? path.join("generated-audio", translation, bookSlug, String(chapter), "audio", fileName)
+      : path.join("generated-audio", translation, bookSlug, String(chapter), fileName);
+
+  const publicPath = localPath.includes(`${path.sep}audio${path.sep}`) || localPath.includes("/audio/")
+    ? `/api/generated-audio/${translation}/${bookSlug}/${chapter}/audio/${fileName}`
+    : `/api/generated-audio/${translation}/${bookSlug}/${chapter}/${fileName}`;
 
   return {
     part: isObject(value) && typeof value.part === "number" ? value.part : index + 1,
     fileName,
     path: localPath,
-    url: `/api/generated-audio/${translation}/${bookSlug}/${chapter}/${fileName}`
+    source: "local",
+    url: publicPath
   };
 }
 
@@ -81,14 +83,21 @@ async function fileExists(filePath: string): Promise<boolean> {
 }
 
 export function resolveGeneratedAudioFile(translation: string, book: string, chapter: string, fileName: string): string | null {
-  const translationSlug = slugify(translation);
-  const bookSlug = slugify(book);
+  const translationSlug = slugifyAudioPath(translation);
+  const bookSlug = slugifyAudioPath(book);
+  const filePath = fileName.split("/").filter(Boolean);
 
-  if (!translationSlug || !bookSlug || !/^\d+$/.test(chapter) || !/^part-\d+\.mp3$/i.test(fileName)) {
+  if (
+    !translationSlug ||
+    !bookSlug ||
+    !/^\d+$/.test(chapter) ||
+    filePath.some((part) => part === "." || part === "..") ||
+    !/^(part|segment)-\d+\.mp3$/i.test(filePath.at(-1) ?? "")
+  ) {
     return null;
   }
 
-  const resolved = path.resolve(AUDIO_ROOT, translationSlug, bookSlug, chapter, fileName);
+  const resolved = path.resolve(AUDIO_ROOT, translationSlug, bookSlug, chapter, ...filePath);
   if (!resolved.startsWith(`${AUDIO_ROOT}${path.sep}`)) {
     return null;
   }
@@ -101,10 +110,10 @@ export async function loadChapterAudioManifest(
   chapter: string,
   requestedTranslation?: string
 ): Promise<ChapterAudioLoadResult> {
-  const bookSlug = slugify(book);
+  const bookSlug = slugifyAudioPath(book);
   const chapterSlug = String(Number(chapter));
   const translations = requestedTranslation
-    ? [slugify(requestedTranslation)]
+    ? [slugifyAudioPath(requestedTranslation)]
     : ["amp", "ampc"];
 
   for (const translation of translations) {
@@ -116,7 +125,7 @@ export async function loadChapterAudioManifest(
       const parsedParts = Array.isArray(parsedObject.audioParts) ? parsedObject.audioParts : [];
       const displayBook = typeof parsedObject.book === "string" ? parsedObject.book : toDisplayBook(bookSlug);
       const manifestTranslation = typeof parsedObject.translation === "string"
-        ? slugify(parsedObject.translation)
+        ? slugifyAudioPath(parsedObject.translation)
         : translation;
       const manifestChapter = typeof parsedObject.chapter === "number"
         ? parsedObject.chapter
@@ -128,7 +137,11 @@ export async function loadChapterAudioManifest(
 
       const missingFiles: string[] = [];
       for (const part of audioParts) {
-        const resolvedPart = resolveGeneratedAudioFile(manifestTranslation, bookSlug, String(manifestChapter), part.fileName);
+        const localPartPath = part.path.replace(/^generated-audio[\\/]/, "");
+        const relativeToChapter = localPartPath
+          .replace(`${manifestTranslation}${path.sep}${bookSlug}${path.sep}${manifestChapter}${path.sep}`, "")
+          .replace(`${manifestTranslation}/${bookSlug}/${manifestChapter}/`, "");
+        const resolvedPart = resolveGeneratedAudioFile(manifestTranslation, bookSlug, String(manifestChapter), relativeToChapter);
         if (!resolvedPart || !(await fileExists(resolvedPart))) {
           missingFiles.push(part.fileName);
         }
