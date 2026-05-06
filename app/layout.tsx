@@ -25,6 +25,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
             <div className="header-right">
               <nav className="primary-nav" aria-label="Primary">
                 <Link href="/" className="nav-link">Scripture</Link>
+                <Link href="/audio/john/3" className="nav-link">Audio</Link>
                 <Link href="/playlists" className="nav-link">Playlists</Link>
                 <Link href="/notes" className="nav-link">Journal</Link>
               </nav>

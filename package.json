@@ -5,6 +5,7 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
+    "audio:chapter": "node scripts/generate-chapter-audio.mjs",
     "start": "next start",
     "test": "vitest run"
   },
