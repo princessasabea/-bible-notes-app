@@ -67,19 +67,29 @@ const BIBLE_BOOK_PATTERN = [
   "Rev(?:elation)?"
 ].join("|");
 
-const BIBLE_REFERENCE_REGEX = new RegExp(
-  `\\((?:see\\s+|cf\\.\\s*)?(?:${BIBLE_BOOK_PATTERN})\\.?\\s+\\d{1,3}:\\d{1,3}(?:[-–]\\d{1,3})?(?:\\s*[,;]\\s*(?:\\d{1,3}:)?\\d{1,3}(?:[-–]\\d{1,3})?)*\\)`,
-  "gi"
-);
+const BIBLE_REFERENCE_CONTENT_PATTERN =
+  `(?:see\\s+|cf\\.\\s*)?(?:${BIBLE_BOOK_PATTERN})\\.?\\s+\\d{1,3}:\\d{1,3}(?:[-–]\\d{1,3})?(?:\\s*[,;]\\s*(?:\\d{1,3}:)?\\d{1,3}(?:[-–]\\d{1,3})?)*`;
+
+const BIBLE_REFERENCE_CONTENT_REGEX = new RegExp(`^\\s*${BIBLE_REFERENCE_CONTENT_PATTERN}\\s*$`, "i");
+const BIBLE_REFERENCE_PARENTHESES_REGEX = new RegExp(`\\(\\s*${BIBLE_REFERENCE_CONTENT_PATTERN}\\s*\\)`, "gi");
+const BIBLE_REFERENCE_BRACKETS_REGEX = new RegExp(`\\[\\s*${BIBLE_REFERENCE_CONTENT_PATTERN}\\s*\\]`, "gi");
 
 function normalizeAmpParenthesesForSpeech(text) {
   return text.replace(/\(([^()]+)\)/g, (_match, inner) => {
-    if (BIBLE_REFERENCE_REGEX.test(`(${inner})`)) {
-      BIBLE_REFERENCE_REGEX.lastIndex = 0;
+    if (BIBLE_REFERENCE_CONTENT_REGEX.test(inner)) {
       return "";
     }
 
-    BIBLE_REFERENCE_REGEX.lastIndex = 0;
+    return `, ${inner.trim()},`;
+  });
+}
+
+function normalizeAmpBracketsForSpeech(text) {
+  return text.replace(/\[([^\[\]]+)\]/g, (_match, inner) => {
+    if (BIBLE_REFERENCE_CONTENT_REGEX.test(inner)) {
+      return "";
+    }
+
     return `, ${inner.trim()},`;
   });
 }
@@ -117,6 +127,7 @@ function normalizeSpacing(text) {
   return text
     .replace(/\s+([,.;:!?])/g, "$1")
     .replace(/,\s*,+/g, ",")
+    .replace(/,\s*([.!?])/g, "$1")
     .replace(/\s{2,}/g, " ")
     .replace(/\s*\n\s*/g, "\n")
     .replace(/\n{3,}/g, "\n\n")
@@ -129,11 +140,13 @@ export function cleanBibleTextForNarration(text, translation = "amp") {
 
   cleaned = removeSectionLabels(cleaned);
   cleaned = removeFootnoteMarkers(cleaned);
-  cleaned = cleaned.replace(BIBLE_REFERENCE_REGEX, "");
+  cleaned = cleaned.replace(BIBLE_REFERENCE_PARENTHESES_REGEX, "");
+  cleaned = cleaned.replace(BIBLE_REFERENCE_BRACKETS_REGEX, "");
   cleaned = removeVerseNumbers(cleaned);
 
   if (translationSlug === "amp" || translationSlug === "ampc") {
     cleaned = normalizeAmpParenthesesForSpeech(cleaned);
+    cleaned = normalizeAmpBracketsForSpeech(cleaned);
   }
 
   return normalizeSpacing(cleaned);

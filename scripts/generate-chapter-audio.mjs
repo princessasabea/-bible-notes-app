@@ -210,13 +210,14 @@ async function main() {
 
   const audioParts = [];
   for (let index = 0; index < parts.length; index += 1) {
+    const segmentNumber = index + 1;
     const fileName = `segment-${index + 1}.mp3`;
     const outputPath = path.join(outputDir, fileName);
     const publicUrl = `/api/generated-audio/${translationSlug}/${bookSlug}/${chapter}/audio/${fileName}`;
     const storagePath = `bible-audio/${translationSlug}/${bookSlug}/${chapter}/audio/${fileName}`;
     audioParts.push({
-      part: index + 1,
-      segment: index + 1,
+      part: segmentNumber,
+      segment: segmentNumber,
       fileName,
       path: outputPath,
       storagePath,
@@ -232,8 +233,9 @@ async function main() {
       throw new Error("OPENAI_API_KEY is required. Add it to .env.local or export it in your shell.");
     }
 
-    console.log(`Generating ${outputPath} (${parts[index].length} chars)`);
+    console.log(`Generating ${options.book} ${chapter} segment ${segmentNumber}/${parts.length} (${parts[index].length} chars)`);
     await generateAudio(parts[index], outputPath, options);
+    console.log(`Finished ${options.book} ${chapter} segment ${segmentNumber}/${parts.length}`);
     console.log(`Saved ${outputPath}`);
   }
 

@@ -255,6 +255,10 @@ The generator skips chapters that already have `manifest.json` and `audio/segmen
 
 - `npm run audio:book -- --translation amp --book John --source api --force`
 
+Generation is sequential by default so only one chapter is being prepared at a time, and each chapter still generates one TTS segment at a time. Keep the default unless you intentionally want parallel work:
+
+- `npm run audio:book -- --translation amp --book John --source api --concurrency 1`
+
 Upload every generated John chapter to Firebase:
 
 - `npm run audio:upload:book -- --translation amp --book John --service-account ./serviceAccountKey.json`
@@ -303,6 +307,11 @@ Open the full book listening page:
 Open a chapter directly:
 
 - `http://localhost:3000/audio/john/3?translation=amp`
+
+If you previously generated audio before narration cleanup was fixed, regenerate and re-upload the affected book so square-bracket cross references are removed from the spoken audio:
+
+- `npm run audio:book -- --translation amp --book John --source api --force`
+- `npm run audio:upload:book -- --translation amp --book John --service-account ./serviceAccountKey.json`
 
 ## Expanded AMP listening pack
 

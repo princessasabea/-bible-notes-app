@@ -25,4 +25,20 @@ describe("cleanBibleTextForNarration", () => {
       "Jesus answered him, Unless a person is born again, that is, spiritually reborn, he cannot see the kingdom of God."
     );
   });
+
+  it("removes square-bracket Bible references while keeping explanatory notes", () => {
+    const input = "1 In the beginning [Gen 1:3] was the Word. Nicodemus, a ruler (member of the Sanhedrin).";
+
+    expect(cleanBibleTextForNarration(input, "amp")).toBe(
+      "In the beginning was the Word. Nicodemus, a ruler, member of the Sanhedrin."
+    );
+  });
+
+  it("keeps explanatory AMP brackets as spoken commas", () => {
+    const input = "28 We know [in accordance with His purpose] that God works all things together. [Rom 8:28]";
+
+    expect(cleanBibleTextForNarration(input, "amp")).toBe(
+      "We know, in accordance with His purpose, that God works all things together."
+    );
+  });
 });

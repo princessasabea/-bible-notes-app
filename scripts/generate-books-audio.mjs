@@ -16,6 +16,7 @@ Options:
   --books Romans,James    Comma-separated books. Default: Romans,Psalms,Proverbs,Philippians,James
   --source api            Source for chapter text. Default: api
   --out generated-audio   Output audio root. Default: generated-audio
+  --concurrency 1         Chapters to generate at once inside each book. Default: 1
   --force                 Regenerate chapters that already have manifest.json and audio segments
   --dry-run               Print the generation plan without fetching text or calling OpenAI
 `;
@@ -26,6 +27,7 @@ function parseArgs(argv) {
     books: DEFAULT_BOOKS.join(","),
     source: DEFAULT_SOURCE,
     out: DEFAULT_OUTPUT_ROOT,
+    concurrency: 1,
     force: false,
     dryRun: false
   };
@@ -57,8 +59,14 @@ function parseArgs(argv) {
     args[key] = value;
   }
 
+  const concurrency = Number(args.concurrency);
+  if (!Number.isInteger(concurrency) || concurrency < 1 || concurrency > 8) {
+    throw new Error("--concurrency must be an integer from 1 to 8.");
+  }
+
   return {
     ...args,
+    concurrency,
     books: args.books.split(",").map((book) => book.trim()).filter(Boolean)
   };
 }
@@ -91,7 +99,8 @@ async function main() {
       "--translation", options.translation,
       "--book", book,
       "--source", options.source,
-      "--out", options.out
+      "--out", options.out,
+      "--concurrency", String(options.concurrency)
     ];
 
     if (options.force) {

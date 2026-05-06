@@ -63,6 +63,7 @@ export function ChapterAudioPlayer({
   const router = useRouter();
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const autoPlayRef = useRef(false);
+  const isPlaybackRequestPendingRef = useRef(false);
 
   const initialTranslation = requestedTranslation.toUpperCase();
   const initialFirebaseManifestPath = buildChapterManifestPath(requestedTranslation, initialBook, initialChapter);
@@ -115,6 +116,20 @@ export function ChapterAudioPlayer({
       ? Math.min(100, Math.max(0, (currentTime / audioRef.current.duration) * 100))
       : 0;
 
+  const resetAudioElement = useCallback((): void => {
+    const audio = audioRef.current;
+    autoPlayRef.current = false;
+    isPlaybackRequestPendingRef.current = false;
+
+    if (!audio) {
+      return;
+    }
+
+    audio.pause();
+    audio.removeAttribute("src");
+    audio.load();
+  }, []);
+
   const loadPart = useCallback((index: number, shouldPlay: boolean): void => {
     const audio = audioRef.current;
     const nextPart = audioParts[index];
@@ -123,6 +138,10 @@ export function ChapterAudioPlayer({
     }
 
     autoPlayRef.current = shouldPlay;
+    isPlaybackRequestPendingRef.current = shouldPlay;
+    if (audio.src && audio.src !== nextPart.url) {
+      audio.pause();
+    }
     setPartIndex(index);
     setCurrentTime(0);
     setStatus("loading");
@@ -132,6 +151,15 @@ export function ChapterAudioPlayer({
   }, [audioParts, playbackRate]);
 
   useEffect(() => {
+    window.speechSynthesis?.cancel();
+
+    return () => {
+      resetAudioElement();
+    };
+  }, [resetAudioElement]);
+
+  useEffect(() => {
+    resetAudioElement();
     setSelectedBook(displayBookFromSlug(initialBook));
     setSelectedChapter(String(initialChapter));
     setTranslation((localManifest?.translation ?? requestedTranslation).toUpperCase());
@@ -226,7 +254,7 @@ export function ChapterAudioPlayer({
     return () => {
       cancelled = true;
     };
-  }, [audioRetryCount, initialBook, initialChapter, localManifest, localMissingFiles.length, requestedTranslation]);
+  }, [audioRetryCount, initialBook, initialChapter, localManifest, localMissingFiles.length, requestedTranslation, resetAudioElement]);
 
   useEffect(() => {
     let cancelled = false;
@@ -280,32 +308,6 @@ export function ChapterAudioPlayer({
   }, [playbackRate]);
 
   useEffect(() => {
-    if (!manifest || audioParts.length === 0) {
-      return;
-    }
-
-    const cancelled = { value: false };
-    audioParts.forEach((part, index) => {
-      const audio = new Audio(part.url);
-      audio.preload = index === partIndex + 1 ? "auto" : "metadata";
-      audio.addEventListener("loadedmetadata", () => {
-        if (cancelled.value) {
-          return;
-        }
-        setDurations((current) => {
-          const next = [...current];
-          next[index] = audio.duration;
-          return next;
-        });
-      });
-    });
-
-    return () => {
-      cancelled.value = true;
-    };
-  }, [audioParts, manifest, partIndex]);
-
-  useEffect(() => {
     const audio = audioRef.current;
     if (!audio || audioParts.length === 0) {
       return;
@@ -347,8 +349,12 @@ export function ChapterAudioPlayer({
           .catch(() => {
             setErrorMessage("Press play again to start the chapter.");
             setStatus("paused");
+          })
+          .finally(() => {
+            isPlaybackRequestPendingRef.current = false;
           });
       } else {
+        isPlaybackRequestPendingRef.current = false;
         setStatus("ready");
       }
     };
@@ -363,6 +369,7 @@ export function ChapterAudioPlayer({
       }
     };
     const handleError = (): void => {
+      isPlaybackRequestPendingRef.current = false;
       setErrorMessage("Chapter audio could not be loaded. Check the Firebase upload and try again.");
       setStatus("error");
     };
@@ -400,12 +407,19 @@ export function ChapterAudioPlayer({
     if (!audio || !audioReady || !activePart) {
       return;
     }
+    if (isPlaybackRequestPendingRef.current || status === "loading") {
+      return;
+    }
+    if (status === "playing" && !audio.paused) {
+      return;
+    }
 
     if (!audio.src) {
       loadPart(partIndex, true);
       return;
     }
 
+    isPlaybackRequestPendingRef.current = true;
     audio.play()
       .then(() => {
         setErrorMessage(null);
@@ -414,10 +428,15 @@ export function ChapterAudioPlayer({
       .catch(() => {
         setErrorMessage("Press play again to start the chapter.");
         setStatus("paused");
+      })
+      .finally(() => {
+        isPlaybackRequestPendingRef.current = false;
       });
   };
 
   const pauseChapter = (): void => {
+    autoPlayRef.current = false;
+    isPlaybackRequestPendingRef.current = false;
     audioRef.current?.pause();
     setStatus("paused");
   };

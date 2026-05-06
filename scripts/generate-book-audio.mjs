@@ -33,6 +33,7 @@ Options:
   --book John             Bible book name. Required
   --source api            Source for chapter text. Default: api
   --out generated-audio   Output audio root. Default: generated-audio
+  --concurrency 1         Chapters to generate at once. Default: 1
   --force                 Regenerate chapters that already have manifest.json and audio segments
   --dry-run               Print the generation plan without fetching text or calling OpenAI
 
@@ -46,6 +47,7 @@ function parseArgs(argv) {
     translation: DEFAULT_TRANSLATION,
     source: DEFAULT_SOURCE,
     out: DEFAULT_OUTPUT_ROOT,
+    concurrency: 1,
     force: false,
     dryRun: false
   };
@@ -81,7 +83,12 @@ function parseArgs(argv) {
     throw new Error("Missing required --book.");
   }
 
-  return args;
+  const concurrency = Number(args.concurrency);
+  if (!Number.isInteger(concurrency) || concurrency < 1 || concurrency > 8) {
+    throw new Error("--concurrency must be an integer from 1 to 8.");
+  }
+
+  return { ...args, concurrency };
 }
 
 async function loadLocalEnv() {
@@ -252,6 +259,7 @@ async function main() {
 
   console.log(`Preparing ${translationSlug.toUpperCase()} ${book.name} audio from API.Bible`);
   console.log(`Chapters: 1-${book.chapters}`);
+  console.log(`Generation concurrency: ${options.concurrency}`);
 
   if (options.dryRun) {
     for (let chapter = 1; chapter <= book.chapters; chapter += 1) {
@@ -273,13 +281,15 @@ async function main() {
 
   const bibleId = getBibleId(translationSlug);
   const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), `bible-audio-${translationSlug}-${bookSlug}-`));
+  const chapters = Array.from({ length: book.chapters }, (_value, index) => index + 1);
+  let nextChapterIndex = 0;
 
-  for (let chapter = 1; chapter <= book.chapters; chapter += 1) {
+  async function processChapter(chapter) {
     const outputDir = path.join(options.out, translationSlug, bookSlug, String(chapter));
     if (!options.force && await hasGeneratedChapter(outputDir)) {
       summary.skippedExisting += 1;
       console.log(`Skipping ${book.name} ${chapter}: already generated`);
-      continue;
+      return;
     }
 
     try {
@@ -313,6 +323,17 @@ async function main() {
       console.error(error instanceof Error ? error.message : String(error));
     }
   }
+
+  async function worker() {
+    while (nextChapterIndex < chapters.length) {
+      const chapter = chapters[nextChapterIndex];
+      nextChapterIndex += 1;
+      await processChapter(chapter);
+    }
+  }
+
+  const workerCount = Math.min(options.concurrency, chapters.length);
+  await Promise.all(Array.from({ length: workerCount }, () => worker()));
 
   await fs.rm(tempDir, { recursive: true, force: true });
 
