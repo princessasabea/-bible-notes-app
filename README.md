@@ -122,6 +122,55 @@ To upload without making changes, preview the plan first:
 
 - `npm run audio:upload -- --translation amp --book John --chapter 3 --dry-run`
 
+## Batch chapter audio
+
+The first practical batch set is:
+
+- John
+- Romans
+- Ephesians
+- Philippians
+- James
+
+Put local chapter text files in this structure:
+
+```text
+local-chapters/
+  amp/
+    john/
+      1.txt
+      2.txt
+      3.txt
+    romans/
+      1.txt
+```
+
+Generate every available chapter text file for those books:
+
+- `npm run audio:batch -- --translation amp --books John,Romans,Ephesians,Philippians,James`
+
+The batch generator:
+
+- skips books or chapters with missing text files
+- skips chapters that already have `manifest.json` and `audio/segment-*.mp3`
+- regenerates existing chapters only when you pass `--force`
+- prints a summary at the end
+
+Preview without calling OpenAI:
+
+- `npm run audio:batch -- --translation amp --books John,Romans,Ephesians,Philippians,James --dry-run`
+
+Upload every generated chapter for those books:
+
+- `npm run audio:upload:batch -- --translation amp --books John,Romans,Ephesians,Philippians,James --service-account ./serviceAccountKey.json`
+
+The batch uploader:
+
+- uploads only generated chapters that have `manifest.json` and `audio/segment-*.mp3`
+- preserves the Firebase path structure under `bible-audio/{translation}/{book}/{chapter}/`
+- verifies uploaded objects and download URLs
+- prints a summary at the end
+
 To test NKJV instead, create `local-chapters/nkjv/john/3.txt`, then run:
 
 - `npm run audio:chapter -- --translation nkjv --book John --chapter 3 --input local-chapters/nkjv/john/3.txt`
