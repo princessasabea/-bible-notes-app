@@ -2924,6 +2924,283 @@ button:active,
   display: none;
 }
 
+.chapter-audio-page {
+  width: min(100%, 980px);
+  margin: 1rem auto 4rem;
+  padding: 0 0.75rem 5rem;
+}
+
+.chapter-audio-hero {
+  overflow: hidden;
+  border: 1px solid rgba(223, 207, 184, 0.32);
+  border-radius: 32px;
+  background:
+    radial-gradient(circle at 50% 0%, rgba(245, 216, 168, 0.26), transparent 34%),
+    linear-gradient(180deg, #162824 0%, #274239 56%, #151f1d 100%);
+  color: #fff8ec;
+  box-shadow: 0 28px 70px rgba(33, 25, 18, 0.28);
+  padding: clamp(1rem, 4vw, 2rem);
+  display: grid;
+  gap: clamp(1rem, 3vw, 1.5rem);
+}
+
+.chapter-audio-nav {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.8rem;
+}
+
+.chapter-audio-nav a,
+.chapter-audio-nav span,
+.chapter-translation-badge,
+.chapter-audio-heading em,
+.chapter-audio-library-note span {
+  border: 1px solid rgba(255, 248, 236, 0.18);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+  color: rgba(255, 248, 236, 0.82);
+  padding: 0.42rem 0.7rem;
+  font-size: 0.8rem;
+  font-weight: 800;
+}
+
+.chapter-audio-heading {
+  text-align: center;
+  display: grid;
+  justify-items: center;
+  gap: 0.45rem;
+  padding: clamp(0.5rem, 2vw, 1.2rem) 0;
+}
+
+.chapter-translation-badge {
+  letter-spacing: 0.12em;
+}
+
+.chapter-audio-heading h1 {
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: clamp(3rem, 11vw, 7rem);
+  line-height: 0.92;
+}
+
+.chapter-audio-heading p {
+  color: rgba(255, 248, 236, 0.72);
+  font-size: clamp(1rem, 2vw, 1.2rem);
+}
+
+.chapter-audio-heading em {
+  font-style: normal;
+  color: #f4d8a8;
+}
+
+.chapter-main-play {
+  width: min(100%, 360px);
+  min-height: 86px;
+  justify-self: center;
+  border: 0;
+  border-radius: 999px;
+  background: #f4d8a8;
+  color: #172a27;
+  box-shadow: 0 22px 44px rgba(3, 9, 8, 0.34);
+  display: inline-flex;
+  justify-content: center;
+  align-items: center;
+  gap: 1rem;
+  font-size: 1.1rem;
+  font-weight: 900;
+}
+
+.chapter-main-play strong {
+  width: 54px;
+  height: 54px;
+  border-radius: 999px;
+  background: #172a27;
+  color: #f4d8a8;
+  display: grid;
+  place-items: center;
+  font-size: 1.2rem;
+}
+
+.chapter-main-play:disabled {
+  opacity: 0.58;
+  cursor: not-allowed;
+}
+
+.chapter-progress-wrap {
+  width: min(100%, 680px);
+  margin: 0 auto;
+  display: grid;
+  gap: 0.5rem;
+}
+
+.chapter-progress-wrap input {
+  width: 100%;
+  accent-color: #f4d8a8;
+}
+
+.chapter-progress-wrap div {
+  display: flex;
+  justify-content: space-between;
+  color: rgba(255, 248, 236, 0.72);
+  font-size: 0.9rem;
+}
+
+.chapter-audio-actions {
+  display: grid;
+  grid-template-columns: 0.85fr 1.15fr 0.7fr 0.7fr auto;
+  gap: 0.75rem;
+  align-items: flex-end;
+  border-top: 1px solid rgba(255, 248, 236, 0.14);
+  padding-top: 1rem;
+}
+
+.chapter-audio-actions label {
+  color: rgba(255, 248, 236, 0.7);
+  font-size: 0.82rem;
+}
+
+.chapter-audio-actions select {
+  border-color: rgba(255, 248, 236, 0.18);
+  background: rgba(255, 255, 255, 0.1);
+  color: #fff8ec;
+}
+
+.chapter-audio-actions select option {
+  color: #1f2d29;
+}
+
+.chapter-audio-actions button,
+.chapter-audio-missing button,
+.chapter-audio-library-note button {
+  min-height: 44px;
+  border: 0;
+  border-radius: 999px;
+  background: #f4d8a8;
+  color: #172a27;
+  font-weight: 900;
+}
+
+.chapter-audio-missing {
+  margin: 1rem auto 0;
+  border: 1px solid #ead8bd;
+  border-radius: 24px;
+  background: #fffaf2;
+  color: #30261d;
+  box-shadow: 0 18px 38px rgba(74, 52, 32, 0.1);
+  padding: clamp(1rem, 3vw, 1.35rem);
+  display: grid;
+  gap: 1rem;
+}
+
+.chapter-audio-missing span {
+  display: inline-flex;
+  width: fit-content;
+  border-radius: 999px;
+  background: #263d36;
+  color: #fff8ec;
+  padding: 0.28rem 0.62rem;
+  font-size: 0.74rem;
+  font-weight: 900;
+}
+
+.chapter-audio-missing h2 {
+  margin-top: 0.5rem;
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: clamp(1.8rem, 4vw, 2.7rem);
+}
+
+.chapter-audio-missing p {
+  color: #735f49;
+}
+
+.chapter-audio-missing dl {
+  display: grid;
+  grid-template-columns: 160px 1fr;
+  gap: 0.65rem 0.8rem;
+  margin: 0;
+}
+
+.chapter-audio-missing dt {
+  color: #7a634c;
+  font-weight: 900;
+}
+
+.chapter-audio-missing dd {
+  min-width: 0;
+  margin: 0;
+}
+
+.chapter-audio-missing pre,
+.chapter-audio-missing code {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.chapter-audio-library-note {
+  width: min(100%, 900px);
+  margin: 1rem auto 0;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.8rem;
+  border: 1px solid #eadcc4;
+  border-radius: 22px;
+  background: #fffaf2;
+  padding: 0.8rem;
+}
+
+.chapter-audio-library-note span {
+  background: #263d36;
+  color: #fff8ec;
+}
+
+.chapter-sticky-player {
+  position: fixed;
+  left: 50%;
+  bottom: 1rem;
+  z-index: 30;
+  width: min(92vw, 520px);
+  transform: translateX(-50%);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.8rem;
+  border: 1px solid rgba(255, 248, 236, 0.22);
+  border-radius: 22px;
+  background: rgba(23, 42, 39, 0.95);
+  color: #fff8ec;
+  box-shadow: 0 20px 44px rgba(22, 15, 10, 0.28);
+  backdrop-filter: blur(10px);
+  padding: 0.78rem;
+}
+
+.chapter-sticky-player div {
+  min-width: 0;
+  display: grid;
+  gap: 0.12rem;
+}
+
+.chapter-sticky-player strong,
+.chapter-sticky-player span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.chapter-sticky-player span {
+  color: rgba(255, 248, 236, 0.7);
+  font-size: 0.8rem;
+}
+
+.chapter-sticky-player button {
+  border: 0;
+  border-radius: 999px;
+  background: #f4d8a8;
+  color: #172a27;
+  font-weight: 900;
+  padding: 0.62rem 0.9rem;
+}
+
 @media (max-width: 760px) {
   .audio-listening-page {
     padding: 0 0 5.5rem;
@@ -3002,5 +3279,37 @@ button:active,
     color: #172a27;
     font-weight: 800;
     padding: 0.62rem 0.9rem;
+  }
+
+  .chapter-audio-page {
+    padding: 0 0.5rem 5.5rem;
+  }
+
+  .chapter-audio-hero {
+    border-radius: 24px;
+  }
+
+  .chapter-audio-nav {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .chapter-audio-nav a,
+  .chapter-audio-nav span {
+    text-align: center;
+  }
+
+  .chapter-main-play {
+    min-height: 76px;
+  }
+
+  .chapter-audio-actions,
+  .chapter-audio-missing dl {
+    grid-template-columns: 1fr;
+  }
+
+  .chapter-audio-library-note {
+    align-items: stretch;
+    flex-direction: column;
   }
 }

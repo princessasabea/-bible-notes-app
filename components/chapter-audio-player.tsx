@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation";
 import { BIBLE_BOOKS } from "@/lib/bible/books";
 import type { ChapterAudioManifest } from "@/lib/audio/chapter-audio";
 import { loadFirebaseChapterAudioManifest } from "@/lib/audio/firebase-chapter-audio";
-import { buildChapterAudioFolder, buildChapterManifestPath } from "@/lib/audio/storage-paths";
+import { buildChapterManifestPath } from "@/lib/audio/storage-paths";
 
 type Props = {
   initialBook: string;
@@ -17,7 +17,6 @@ type Props = {
   requestedTranslation: string;
 };
 
-type AudioMode = "ai" | "device";
 type PlayerStatus = "idle" | "loading" | "ready" | "playing" | "paused" | "ended" | "error";
 type ScriptureStatus = "idle" | "loading" | "ready" | "error";
 
@@ -26,18 +25,8 @@ type ScriptureVerse = {
   text: string;
 };
 
-type FirebaseDebugState = {
-  expectedManifestPath: string;
-  manifestFound: boolean;
-  segmentCount: number;
-  audioUrls: string[];
-  localFallbackStatus: string;
-  errorMessage: string | null;
-};
-
-const TRANSLATIONS = ["AMP", "AMPC", "NKJV", "ESV", "KJV"] as const;
-const AI_SPEEDS = [0.85, 0.9, 1, 1.1, 1.2] as const;
-const DEVICE_RATES = [0.75, 0.85, 0.95, 1, 1.1] as const;
+const TRANSLATIONS = ["AMP", "AMPC", "NKJV", "KJV", "ESV"] as const;
+const PLAYBACK_SPEEDS = [0.85, 0.9, 1, 1.1, 1.2] as const;
 
 function slugify(value: string): string {
   return value
@@ -49,27 +38,22 @@ function slugify(value: string): string {
 
 function displayBookFromSlug(value: string): string {
   const found = BIBLE_BOOKS.find((book) => slugify(book.name) === slugify(value));
-  return found?.name ?? value.split("-").map((part) => part.charAt(0).toUpperCase() + part.slice(1)).join(" ");
+  return found?.name ?? value.split("-").filter(Boolean).map((part) => part.charAt(0).toUpperCase() + part.slice(1)).join(" ");
 }
 
 function formatTime(seconds: number): string {
   if (!Number.isFinite(seconds) || seconds < 0) {
     return "--:--";
   }
+
   const rounded = Math.floor(seconds);
   return `${Math.floor(rounded / 60)}:${String(rounded % 60).padStart(2, "0")}`;
 }
 
 function sumDurations(durations: number[], endIndex: number): number {
-  return durations.slice(0, endIndex).reduce((total, duration) => total + (Number.isFinite(duration) ? duration : 0), 0);
-}
-
-function splitSpeechText(text: string): string[] {
-  return text
-    .replace(/\s+/g, " ")
-    .split(/(?<=[.!?])\s+(?=\S)/)
-    .map((entry) => entry.trim())
-    .filter((entry) => entry.length > 0);
+  return durations
+    .slice(0, endIndex)
+    .reduce((total, duration) => total + (Number.isFinite(duration) ? duration : 0), 0);
 }
 
 function splitScriptureVerses(text: string): ScriptureVerse[] {
@@ -83,15 +67,12 @@ function splitScriptureVerses(text: string): ScriptureVerse[] {
     return [{ number: "1", text: normalized }];
   }
 
-  return matches.map((match, index) => ({
-    number: match[1] || String(index + 1),
-    text: match[2].trim()
-  })).filter((verse) => verse.text.length > 0);
-}
-
-function isAppleVoice(voice: SpeechSynthesisVoice): boolean {
-  const value = `${voice.name} ${voice.voiceURI}`.toLowerCase();
-  return value.includes("apple") || value.includes("samantha") || value.includes("ava") || value.includes("allison") || value.includes("susan");
+  return matches
+    .map((match, index) => ({
+      number: match[1] || String(index + 1),
+      text: match[2].trim()
+    }))
+    .filter((verse) => verse.text.length > 0);
 }
 
 export function ChapterAudioPlayer({
@@ -105,87 +86,55 @@ export function ChapterAudioPlayer({
   const router = useRouter();
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const autoPlayRef = useRef(false);
-  const deviceUtteranceRef = useRef<SpeechSynthesisUtterance | null>(null);
-  const deviceTextRef = useRef<string[]>([]);
-  const deviceIndexRef = useRef(0);
 
+  const initialTranslation = requestedTranslation.toUpperCase();
   const initialFirebaseManifestPath = buildChapterManifestPath(requestedTranslation, initialBook, initialChapter);
-  const initialFirebaseFolderPath = buildChapterAudioFolder(requestedTranslation, initialBook, initialChapter);
 
   const [manifest, setManifest] = useState<ChapterAudioManifest | null>(localManifest);
-  const [missingFiles, setMissingFiles] = useState<string[]>(localMissingFiles);
-  const [audioSource, setAudioSource] = useState<"firebase" | "local" | "none">(localManifest ? "local" : "none");
-  const [activeMode, setActiveMode] = useState<AudioMode>("ai");
-  const [firebaseErrorMessage, setFirebaseErrorMessage] = useState<string | null>(null);
-  const [expectedFirebaseManifestPath, setExpectedFirebaseManifestPath] = useState(initialFirebaseManifestPath);
-  const [expectedFirebaseFolderPath, setExpectedFirebaseFolderPath] = useState(initialFirebaseFolderPath);
-  const [isResolvingAudioSource, setIsResolvingAudioSource] = useState(true);
+  const [audioSource, setAudioSource] = useState<"firebase" | "local" | "none">(localManifest && localMissingFiles.length === 0 ? "local" : "none");
   const [selectedBook, setSelectedBook] = useState(displayBookFromSlug(initialBook));
   const [selectedChapter, setSelectedChapter] = useState(String(initialChapter));
-  const [translation, setTranslation] = useState((localManifest?.translation ?? requestedTranslation).toUpperCase());
-  const [partIndex, setPartIndex] = useState(0);
+  const [translation, setTranslation] = useState((localManifest?.translation ?? initialTranslation).toUpperCase());
+  const [expectedFirebaseManifestPath, setExpectedFirebaseManifestPath] = useState(initialFirebaseManifestPath);
+  const [isResolvingAudio, setIsResolvingAudio] = useState(true);
   const [status, setStatus] = useState<PlayerStatus>(localManifest ? "loading" : "idle");
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [partIndex, setPartIndex] = useState(0);
   const [currentTime, setCurrentTime] = useState(0);
   const [durations, setDurations] = useState<number[]>(() => localManifest?.audioParts.map(() => Number.NaN) ?? []);
-  const [aiRate, setAiRate] = useState(1);
-  const [voices, setVoices] = useState<SpeechSynthesisVoice[]>([]);
-  const [selectedVoiceURI, setSelectedVoiceURI] = useState("");
-  const [deviceRate, setDeviceRate] = useState(0.95);
-  const [devicePitch, setDevicePitch] = useState(1);
-  const [deviceText, setDeviceText] = useState("");
-  const [deviceStatus, setDeviceStatus] = useState<PlayerStatus>("idle");
-  const [deviceError, setDeviceError] = useState<string | null>(null);
-  const [deviceProgress, setDeviceProgress] = useState(0);
-  const [deviceTotal, setDeviceTotal] = useState(0);
+  const [playbackRate, setPlaybackRate] = useState(1);
   const [audioRetryCount, setAudioRetryCount] = useState(0);
   const [scriptureText, setScriptureText] = useState("");
   const [scriptureStatus, setScriptureStatus] = useState<ScriptureStatus>("idle");
   const [scriptureError, setScriptureError] = useState<string | null>(null);
   const [isFocusMode, setIsFocusMode] = useState(false);
-  const [firebaseDebug, setFirebaseDebug] = useState<FirebaseDebugState>({
-    expectedManifestPath: initialFirebaseManifestPath,
-    manifestFound: Boolean(localManifest),
-    segmentCount: localManifest?.audioParts.length ?? 0,
-    audioUrls: localManifest?.audioParts.map((part) => part.url) ?? [],
-    localFallbackStatus: localManifest ? (localMissingFiles.length === 0 ? "available" : `missing ${localMissingFiles.join(", ")}`) : "not found",
-    errorMessage: null
-  });
 
   const activeBook = manifest?.book ?? displayBookFromSlug(initialBook);
   const activeChapter = manifest?.chapter ?? initialChapter;
+  const chapterLabel = `${activeBook} ${activeChapter}`;
   const audioParts = manifest?.audioParts ?? [];
   const activePart = audioParts[partIndex] ?? null;
-  const aiReady = Boolean(manifest && audioParts.length > 0 && missingFiles.length === 0 && !errorMessage);
-  const knownDuration = durations.length > 0 && durations.every((duration) => Number.isFinite(duration));
-  const chapterDuration = knownDuration ? sumDurations(durations, durations.length) : Number.NaN;
-  const chapterElapsed = sumDurations(durations, partIndex) + currentTime;
-  const chapterRemaining = knownDuration ? Math.max(0, chapterDuration - chapterElapsed) : Number.NaN;
-  const aiProgressPercent = knownDuration && chapterDuration > 0
-    ? Math.min(100, Math.max(0, (chapterElapsed / chapterDuration) * 100))
-    : activePart && audioRef.current?.duration
-      ? Math.min(100, Math.max(0, (currentTime / audioRef.current.duration) * 100))
-      : 0;
-  const deviceProgressPercent = deviceTotal > 0 ? Math.min(100, (deviceProgress / deviceTotal) * 100) : 0;
-  const progressPercent = activeMode === "ai" ? aiProgressPercent : deviceProgressPercent;
-
+  const audioReady = Boolean(manifest && audioParts.length > 0 && !errorMessage);
+  const isLocalPreview = audioSource === "local";
+  const missingMessage = "Chapter narration is not ready yet.";
+  const generationCommand = `npm run audio:chapter -- --translation ${requestedTranslation.toLowerCase()} --book ${activeBook} --chapter ${activeChapter} --input local-chapters/${requestedTranslation.toLowerCase()}/${slugify(activeBook)}/${activeChapter}.txt`;
+  const uploadCommand = `npm run audio:upload -- --translation ${requestedTranslation.toLowerCase()} --book ${activeBook} --chapter ${activeChapter} --service-account ./serviceAccountKey.json`;
+  const progressKey = `chapter-audio:${requestedTranslation.toLowerCase()}:${slugify(activeBook)}:${activeChapter}`;
+  const scriptureVerses = useMemo(() => splitScriptureVerses(scriptureText), [scriptureText]);
   const selectedBookMeta = useMemo(
     () => BIBLE_BOOKS.find((book) => book.name === selectedBook) ?? BIBLE_BOOKS.find((book) => book.name === activeBook) ?? BIBLE_BOOKS[0],
     [activeBook, selectedBook]
   );
-  const selectedVoice = useMemo(
-    () => voices.find((voice) => voice.voiceURI === selectedVoiceURI) ?? voices.find(isAppleVoice) ?? voices[0] ?? null,
-    [selectedVoiceURI, voices]
-  );
-  const sourceLabel = audioSource === "firebase" ? "Cloud narration" : audioSource === "local" ? "Local narration" : "Narration unavailable";
-  const chapterLabel = `${activeBook} ${activeChapter}`;
-  const expectedFirebasePath = expectedFirebaseManifestPath;
-  const missingAiMessage = `AI narration is not uploaded yet for ${translation} ${activeBook} ${activeChapter}.`;
-  const generationCommand = `npm run audio:chapter -- --translation ${requestedTranslation} --book "${activeBook}" --chapter ${activeChapter} --input local-chapters/${requestedTranslation}/${slugify(activeBook)}/${activeChapter}.txt`;
-  const uploadCommand = `npm run audio:upload -- --translation ${requestedTranslation} --book "${activeBook}" --chapter ${activeChapter} --service-account ./serviceAccountKey.json`;
-  const progressKey = `chapter-audio:${requestedTranslation}:${slugify(activeBook)}:${activeChapter}`;
-  const scriptureVerses = useMemo(() => splitScriptureVerses(scriptureText), [scriptureText]);
-  const isDev = process.env.NODE_ENV === "development";
+
+  const knownDuration = durations.length > 0 && durations.every((duration) => Number.isFinite(duration));
+  const chapterDuration = knownDuration ? sumDurations(durations, durations.length) : Number.NaN;
+  const chapterElapsed = sumDurations(durations, partIndex) + currentTime;
+  const chapterRemaining = knownDuration ? Math.max(0, chapterDuration - chapterElapsed) : Number.NaN;
+  const progressPercent = knownDuration && chapterDuration > 0
+    ? Math.min(100, Math.max(0, (chapterElapsed / chapterDuration) * 100))
+    : activePart && audioRef.current?.duration
+      ? Math.min(100, Math.max(0, (currentTime / audioRef.current.duration) * 100))
+      : 0;
 
   const loadPart = useCallback((index: number, shouldPlay: boolean): void => {
     const audio = audioRef.current;
@@ -199,44 +148,22 @@ export function ChapterAudioPlayer({
     setCurrentTime(0);
     setStatus("loading");
     audio.src = nextPart.url;
-    audio.playbackRate = aiRate;
+    audio.playbackRate = playbackRate;
     audio.load();
-  }, [aiRate, audioParts]);
-
-  useEffect(() => {
-    const updateVoices = (): void => {
-      const available = window.speechSynthesis?.getVoices?.() ?? [];
-      setVoices(available);
-      if (!selectedVoiceURI && available.length > 0) {
-        setSelectedVoiceURI((available.find(isAppleVoice) ?? available[0]).voiceURI);
-      }
-    };
-
-    updateVoices();
-    window.speechSynthesis?.addEventListener("voiceschanged", updateVoices);
-    return () => window.speechSynthesis?.removeEventListener("voiceschanged", updateVoices);
-  }, [selectedVoiceURI]);
+  }, [audioParts, playbackRate]);
 
   useEffect(() => {
     setSelectedBook(displayBookFromSlug(initialBook));
     setSelectedChapter(String(initialChapter));
     setTranslation((localManifest?.translation ?? requestedTranslation).toUpperCase());
+    setManifest(null);
+    setAudioSource("none");
     setPartIndex(0);
     setCurrentTime(0);
-    setDurations(localManifest?.audioParts.map(() => Number.NaN) ?? []);
+    setDurations([]);
     setErrorMessage(null);
-    setFirebaseErrorMessage(null);
     setExpectedFirebaseManifestPath(buildChapterManifestPath(requestedTranslation, initialBook, initialChapter));
-    setExpectedFirebaseFolderPath(buildChapterAudioFolder(requestedTranslation, initialBook, initialChapter));
-    setFirebaseDebug({
-      expectedManifestPath: buildChapterManifestPath(requestedTranslation, initialBook, initialChapter),
-      manifestFound: false,
-      segmentCount: 0,
-      audioUrls: [],
-      localFallbackStatus: localManifest ? (localMissingFiles.length === 0 ? "available" : `missing ${localMissingFiles.join(", ")}`) : "not found",
-      errorMessage: null
-    });
-    setIsResolvingAudioSource(true);
+    setIsResolvingAudio(true);
     setStatus("loading");
 
     let cancelled = false;
@@ -247,35 +174,19 @@ export function ChapterAudioPlayer({
         }
 
         setExpectedFirebaseManifestPath(result.expectedManifestPath);
-        setExpectedFirebaseFolderPath(result.expectedFolderPath);
-        setFirebaseDebug({
-          expectedManifestPath: result.expectedManifestPath,
-          manifestFound: Boolean(result.manifest),
-          segmentCount: result.manifest?.audioParts.length ?? 0,
-          audioUrls: result.manifest?.audioParts.map((part) => part.url) ?? [],
-          localFallbackStatus: localManifest ? (localMissingFiles.length === 0 ? "available" : `missing ${localMissingFiles.join(", ")}`) : "not found",
-          errorMessage: result.errorMessage
-        });
-
         if (result.manifest) {
           setManifest(result.manifest);
-          setMissingFiles([]);
           setAudioSource("firebase");
-          setActiveMode("ai");
           setTranslation(result.manifest.translation.toUpperCase());
           setDurations(result.manifest.audioParts.map(() => Number.NaN));
           setErrorMessage(null);
-          setFirebaseErrorMessage(null);
           setStatus("loading");
           return;
         }
 
-        setFirebaseErrorMessage(result.errorMessage);
-        if (localManifest && localMissingFiles.length === 0) {
+        if (process.env.NODE_ENV !== "production" && localManifest && localMissingFiles.length === 0) {
           setManifest(localManifest);
-          setMissingFiles(localMissingFiles);
           setAudioSource("local");
-          setActiveMode("ai");
           setTranslation(localManifest.translation.toUpperCase());
           setDurations(localManifest.audioParts.map(() => Number.NaN));
           setErrorMessage(null);
@@ -284,23 +195,18 @@ export function ChapterAudioPlayer({
         }
 
         setManifest(null);
-        setMissingFiles(localMissingFiles);
         setAudioSource("none");
-        setActiveMode("ai");
-        setErrorMessage(missingAiMessage);
+        setErrorMessage(missingMessage);
         setStatus("error");
       })
-      .catch((error: unknown) => {
+      .catch(() => {
         if (cancelled) {
           return;
         }
 
-        setFirebaseErrorMessage(error instanceof Error ? error.message : "Cloud narration could not be loaded.");
-        if (localManifest && localMissingFiles.length === 0) {
+        if (process.env.NODE_ENV !== "production" && localManifest && localMissingFiles.length === 0) {
           setManifest(localManifest);
-          setMissingFiles(localMissingFiles);
           setAudioSource("local");
-          setActiveMode("ai");
           setTranslation(localManifest.translation.toUpperCase());
           setDurations(localManifest.audioParts.map(() => Number.NaN));
           setErrorMessage(null);
@@ -308,28 +214,20 @@ export function ChapterAudioPlayer({
         } else {
           setManifest(null);
           setAudioSource("none");
-          setActiveMode("ai");
-          setErrorMessage(missingAiMessage);
+          setErrorMessage(missingMessage);
           setStatus("error");
-          setFirebaseDebug((current) => ({
-            ...current,
-            manifestFound: false,
-            segmentCount: 0,
-            audioUrls: [],
-            errorMessage: error instanceof Error ? error.message : "Cloud narration could not be loaded."
-          }));
         }
       })
       .finally(() => {
         if (!cancelled) {
-          setIsResolvingAudioSource(false);
+          setIsResolvingAudio(false);
         }
       });
 
     return () => {
       cancelled = true;
     };
-  }, [audioRetryCount, initialBook, initialChapter, localManifest, localMissingFiles, requestedTranslation]);
+  }, [audioRetryCount, initialBook, initialChapter, localManifest, localMissingFiles.length, requestedTranslation]);
 
   useEffect(() => {
     let cancelled = false;
@@ -339,7 +237,7 @@ export function ChapterAudioPlayer({
     fetch("/api/bible/chapter", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ book: activeBook, chapter: activeChapter, translation })
+      body: JSON.stringify({ book: displayBookFromSlug(initialBook), chapter: initialChapter, translation: requestedTranslation.toUpperCase() })
     })
       .then((response) => response.json())
       .then((data) => {
@@ -347,12 +245,9 @@ export function ChapterAudioPlayer({
           return;
         }
         if (data.status !== "resolved" || !data.text) {
-          throw new Error(data.message ?? `${translation} ${chapterLabel} text is not available yet.`);
+          throw new Error(data.message ?? `${requestedTranslation.toUpperCase()} ${chapterLabel} text is not available yet.`);
         }
-        const text = String(data.text);
-        setScriptureText(text);
-        setDeviceText(text);
-        deviceTextRef.current = [];
+        setScriptureText(String(data.text));
         setScriptureStatus("ready");
       })
       .catch((error: unknown) => {
@@ -367,23 +262,23 @@ export function ChapterAudioPlayer({
     return () => {
       cancelled = true;
     };
-  }, [activeBook, activeChapter, chapterLabel, translation]);
+  }, [chapterLabel, initialBook, initialChapter, requestedTranslation]);
 
   useEffect(() => {
-    if (!manifest || audioParts.length === 0 || !audioRef.current || missingFiles.length > 0) {
+    if (!manifest || audioParts.length === 0 || !audioRef.current) {
       return;
     }
 
     loadPart(0, false);
-  }, [audioParts.length, loadPart, manifest, missingFiles.length]);
+  }, [audioParts.length, loadPart, manifest]);
 
   useEffect(() => {
     const audio = audioRef.current;
     if (!audio) {
       return;
     }
-    audio.playbackRate = aiRate;
-  }, [aiRate]);
+    audio.playbackRate = playbackRate;
+  }, [playbackRate]);
 
   useEffect(() => {
     if (!manifest || audioParts.length === 0) {
@@ -413,22 +308,24 @@ export function ChapterAudioPlayer({
 
   useEffect(() => {
     const audio = audioRef.current;
-    if (!audio) {
+    if (!audio || audioParts.length === 0) {
       return;
     }
 
     const saved = window.localStorage.getItem(progressKey);
-    if (saved && audioParts.length > 0) {
-      try {
-        const parsed = JSON.parse(saved) as { index?: number; time?: number };
-        if (typeof parsed.index === "number" && parsed.index > 0 && parsed.index < audioParts.length) {
-          loadPart(parsed.index, false);
-        } else if (typeof parsed.time === "number") {
-          audio.currentTime = parsed.time;
-        }
-      } catch {
-        window.localStorage.removeItem(progressKey);
+    if (!saved) {
+      return;
+    }
+
+    try {
+      const parsed = JSON.parse(saved) as { index?: number; time?: number };
+      if (typeof parsed.index === "number" && parsed.index > 0 && parsed.index < audioParts.length) {
+        loadPart(parsed.index, false);
+      } else if (typeof parsed.time === "number") {
+        audio.currentTime = parsed.time;
       }
+    } catch {
+      window.localStorage.removeItem(progressKey);
     }
   }, [audioParts.length, loadPart, progressKey]);
 
@@ -449,14 +346,13 @@ export function ChapterAudioPlayer({
         audio.play()
           .then(() => setStatus("playing"))
           .catch(() => {
-            setErrorMessage("Playback was blocked. Press play again to start the chapter.");
+            setErrorMessage("Press play again to start the chapter.");
             setStatus("paused");
           });
       } else {
         setStatus("ready");
       }
     };
-
     const handleTimeUpdate = (): void => {
       setCurrentTime(audio.currentTime);
       window.localStorage.setItem(progressKey, JSON.stringify({ index: partIndex, time: audio.currentTime }));
@@ -468,7 +364,7 @@ export function ChapterAudioPlayer({
       }
     };
     const handleError = (): void => {
-      setErrorMessage("This chapter audio could not be loaded. Check the upload or regenerate the chapter.");
+      setErrorMessage("Chapter audio could not be loaded. Check the Firebase upload and try again.");
       setStatus("error");
     };
     const handleEnded = (): void => {
@@ -476,6 +372,7 @@ export function ChapterAudioPlayer({
         loadPart(partIndex + 1, true);
         return;
       }
+
       autoPlayRef.current = false;
       window.localStorage.removeItem(progressKey);
       setStatus("ended");
@@ -499,52 +396,50 @@ export function ChapterAudioPlayer({
     };
   }, [audioParts.length, currentTime, loadPart, partIndex, progressKey]);
 
-  const playAi = (): void => {
+  const playChapter = (): void => {
     const audio = audioRef.current;
-    if (!audio || !aiReady || !activePart) {
+    if (!audio || !audioReady || !activePart) {
       return;
     }
-    window.speechSynthesis?.cancel();
-    setDeviceStatus("paused");
+
     if (!audio.src) {
       loadPart(partIndex, true);
       return;
     }
+
     audio.play()
       .then(() => {
         setErrorMessage(null);
         setStatus("playing");
       })
       .catch(() => {
-        setErrorMessage("Playback was blocked. Press play again to start the chapter.");
+        setErrorMessage("Press play again to start the chapter.");
         setStatus("paused");
       });
   };
 
-  const pauseAi = (): void => {
+  const pauseChapter = (): void => {
     audioRef.current?.pause();
     setStatus("paused");
   };
 
-  const replayAi = (): void => {
+  const togglePlayback = (): void => {
+    if (status === "playing") {
+      pauseChapter();
+      return;
+    }
+
+    playChapter();
+  };
+
+  const replayChapter = (): void => {
     window.localStorage.removeItem(progressKey);
     loadPart(0, status === "playing");
   };
 
-  const goToPart = (nextIndex: number, shouldPlay = status === "playing"): void => {
-    if (!aiReady || nextIndex < 0 || nextIndex >= audioParts.length) {
-      return;
-    }
-    loadPart(nextIndex, shouldPlay);
-  };
-
   const handleSeek = (value: number): void => {
-    if (activeMode === "device") {
-      return;
-    }
-
     const audio = audioRef.current;
-    if (!audio || !aiReady) {
+    if (!audio || !audioReady) {
       return;
     }
 
@@ -575,180 +470,55 @@ export function ChapterAudioPlayer({
     }
   };
 
-  const fetchDeviceText = async (): Promise<string[]> => {
-    if (deviceTextRef.current.length > 0) {
-      return deviceTextRef.current;
-    }
-
-    setDeviceStatus("loading");
-    setDeviceError(null);
-    const response = await fetch("/api/bible/chapter", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ book: activeBook, chapter: activeChapter, translation: translation.toUpperCase() })
-    });
-    const data = await response.json();
-
-    if (data.status !== "resolved" || !data.text) {
-      throw new Error(data.message ?? `${translation} chapter text is not available for device voice yet.`);
-    }
-
-    const blocks = splitSpeechText(data.text);
-    deviceTextRef.current = blocks;
-    setDeviceText(data.text);
-    setDeviceTotal(blocks.length);
-    return blocks;
-  };
-
-  const speakDeviceFrom = (index: number): void => {
-    const blocks = deviceTextRef.current;
-    const text = blocks[index];
-    if (!text) {
-      setDeviceStatus("ended");
-      setDeviceProgress(blocks.length);
-      return;
-    }
-
-    const utterance = new SpeechSynthesisUtterance(text);
-    utterance.rate = deviceRate;
-    utterance.pitch = devicePitch;
-    if (selectedVoice) {
-      utterance.voice = selectedVoice;
-    }
-    utterance.onstart = () => {
-      setDeviceStatus("playing");
-      setDeviceProgress(index + 1);
-    };
-    utterance.onend = () => {
-      if (deviceIndexRef.current === index) {
-        deviceIndexRef.current = index + 1;
-        speakDeviceFrom(index + 1);
-      }
-    };
-    utterance.onerror = () => {
-      setDeviceError("Device voice playback stopped. Try another system voice.");
-      setDeviceStatus("error");
-    };
-
-    deviceUtteranceRef.current = utterance;
-    window.speechSynthesis.speak(utterance);
-  };
-
-  const playDevice = async (): Promise<void> => {
-    if (!("speechSynthesis" in window)) {
-      setDeviceError("This browser does not support device voices.");
-      setDeviceStatus("error");
-      return;
-    }
-
-    audioRef.current?.pause();
-    if (window.speechSynthesis.paused) {
-      window.speechSynthesis.resume();
-      setDeviceStatus("playing");
-      return;
-    }
-
-    try {
-      const blocks = await fetchDeviceText();
-      if (blocks.length === 0) {
-        throw new Error("No chapter text was available for device voice.");
-      }
-      window.speechSynthesis.cancel();
-      deviceIndexRef.current = Math.min(deviceIndexRef.current, blocks.length - 1);
-      speakDeviceFrom(deviceIndexRef.current);
-    } catch (error) {
-      setDeviceError(error instanceof Error ? error.message : "Device voice could not load chapter text.");
-      setDeviceStatus("error");
-    }
-  };
-
-  const pauseDevice = (): void => {
-    window.speechSynthesis?.pause();
-    setDeviceStatus("paused");
-  };
-
-  const replayDevice = async (): Promise<void> => {
-    window.speechSynthesis?.cancel();
-    deviceIndexRef.current = 0;
-    setDeviceProgress(0);
-    await playDevice();
-  };
-
-  const switchMode = (mode: AudioMode): void => {
-    setActiveMode(mode);
-    if (mode === "ai") {
-      window.speechSynthesis?.pause();
-      setDeviceStatus((current) => current === "playing" ? "paused" : current);
-    } else {
-      audioRef.current?.pause();
-    }
-  };
-
-  const checkAgain = (): void => {
-    setErrorMessage(null);
-    setFirebaseErrorMessage(null);
-    setIsResolvingAudioSource(true);
-    setAudioRetryCount((count) => count + 1);
-  };
-
   const navigateToSelection = (): void => {
     const bookSlug = slugify(selectedBook);
     const chapter = Math.max(1, Math.min(Number(selectedChapter) || 1, selectedBookMeta.chapters));
     router.push(`/audio/${bookSlug}/${chapter}?translation=${translation.toLowerCase()}`);
   };
 
-  const mainStatus = isResolvingAudioSource
-    ? "Finding narration"
-    : activeMode === "ai"
-      ? status === "playing" ? "Playing AI Voice" : status === "paused" ? "Paused" : status === "ended" ? "Finished" : aiReady ? "Ready" : "Needs upload"
-      : deviceStatus === "playing" ? "Reading with Device Voice" : deviceStatus === "paused" ? "Paused" : deviceStatus === "loading" ? "Loading text" : "Device Voice";
-  const modeLine = activeMode === "ai" ? "AI Voice: generated MP3 chapter audio" : `Device Voice — uses your browser/system voice`;
+  const checkAgain = (): void => {
+    setErrorMessage(null);
+    setIsResolvingAudio(true);
+    setAudioRetryCount((count) => count + 1);
+  };
+
+  const statusLabel = isResolvingAudio
+    ? "Finding chapter narration"
+    : status === "playing"
+      ? "Now playing"
+      : audioReady
+        ? "Ready to listen"
+        : "Narration needed";
 
   return (
-    <div className="audio-page audio-listening-page">
+    <main className="chapter-audio-page">
       <audio ref={audioRef} preload="metadata" />
 
-      <section className="listen-hero" aria-label="Bible audio player">
-        <div className="listen-topbar">
-          <Link href={`/read/${translation}/${slugify(activeBook)}/${activeChapter}`} className="listen-back">Back to reading</Link>
-          <span className="listen-now-pill">{mainStatus}</span>
+      <section className="chapter-audio-hero" aria-label={`${chapterLabel} audio`}>
+        <div className="chapter-audio-nav">
+          <Link href={`/read/${translation.toLowerCase()}/${slugify(activeBook)}/${activeChapter}`}>Back to reading</Link>
+          <span>{statusLabel}</span>
         </div>
 
-        <div className="listen-artwork" aria-hidden="true">
-          <div className="listen-artwork-ring">
-            <span>{translation}</span>
-            <strong>{activeBook}</strong>
-            <em>{activeChapter}</em>
-          </div>
+        <div className="chapter-audio-heading">
+          <span className="chapter-translation-badge">{translation}</span>
+          <h1>{chapterLabel}</h1>
+          <p>Full chapter narration</p>
+          {isLocalPreview ? <em>Local preview</em> : null}
         </div>
 
-        <div className="listen-title">
-          <p>{translation} • Full Chapter Audio</p>
-          <h2>{chapterLabel}</h2>
-          <span className="listen-source-line">{modeLine}</span>
-        </div>
+        <button
+          type="button"
+          className="chapter-main-play"
+          onClick={togglePlayback}
+          disabled={!audioReady || status === "loading" || isResolvingAudio}
+          aria-label={status === "playing" ? "Pause chapter" : "Play chapter"}
+        >
+          <span>{status === "playing" ? "Pause" : "Play"}</span>
+          <strong>{status === "playing" ? "II" : "▶"}</strong>
+        </button>
 
-        <div className="listen-mode-toggle" role="tablist" aria-label="Audio mode">
-          <button
-            type="button"
-            className={activeMode === "ai" ? "is-active" : ""}
-            onClick={() => switchMode("ai")}
-            disabled={isResolvingAudioSource}
-          >
-            <strong>AI Voice</strong>
-            <span>Generated chapter audio</span>
-          </button>
-          <button
-            type="button"
-            className={activeMode === "device" ? "is-active" : ""}
-            onClick={() => switchMode("device")}
-          >
-            <strong>Device Voice</strong>
-            <span>Browser/system voice</span>
-          </button>
-        </div>
-
-        <div className="listen-progress-card">
+        <div className="chapter-progress-wrap">
           <input
             type="range"
             min="0"
@@ -756,64 +526,16 @@ export function ChapterAudioPlayer({
             step="0.1"
             value={progressPercent}
             onChange={(event) => handleSeek(Number(event.target.value))}
-            disabled={activeMode !== "ai" || !aiReady}
+            disabled={!audioReady}
             aria-label="Chapter progress"
-            className="listen-progress"
           />
-          <div className="listen-time-row">
-            {activeMode === "ai" ? (
-              <>
-                <span>{formatTime(chapterElapsed)}</span>
-                <span>-{formatTime(chapterRemaining)}</span>
-              </>
-            ) : (
-              <>
-                <span>{deviceTotal > 0 ? `${deviceProgress}/${deviceTotal}` : "Ready"}</span>
-                <span>{selectedVoice ? selectedVoice.name : "System voice"}</span>
-              </>
-            )}
+          <div>
+            <span>{formatTime(chapterElapsed)}</span>
+            <span>-{formatTime(chapterRemaining)}</span>
           </div>
         </div>
 
-        <div className="listen-controls" aria-label="Playback controls">
-          <button
-            type="button"
-            className="listen-icon-button"
-            onClick={() => activeMode === "ai" ? goToPart(partIndex - 1) : void replayDevice()}
-            disabled={activeMode === "ai" ? !aiReady || partIndex === 0 : deviceStatus === "loading"}
-            aria-label={activeMode === "ai" ? "Back" : "Replay device voice"}
-            title={activeMode === "ai" ? "Back" : "Replay"}
-          >
-            ↺
-          </button>
-          <button
-            type="button"
-            className="listen-play-button"
-            onClick={() => {
-              if (activeMode === "ai") {
-                status === "playing" ? pauseAi() : playAi();
-              } else {
-                deviceStatus === "playing" ? pauseDevice() : void playDevice();
-              }
-            }}
-            disabled={activeMode === "ai" ? !aiReady || status === "loading" : deviceStatus === "loading"}
-            aria-label={(activeMode === "ai" ? status : deviceStatus) === "playing" ? "Pause" : "Play"}
-          >
-            {(activeMode === "ai" ? status : deviceStatus) === "playing" ? "II" : "▶"}
-          </button>
-          <button
-            type="button"
-            className="listen-icon-button"
-            onClick={() => activeMode === "ai" ? goToPart(partIndex + 1) : window.speechSynthesis.cancel()}
-            disabled={activeMode === "ai" ? !aiReady || partIndex >= audioParts.length - 1 : deviceStatus !== "playing"}
-            aria-label={activeMode === "ai" ? "Forward" : "Stop device voice"}
-            title={activeMode === "ai" ? "Forward" : "Stop"}
-          >
-            ↷
-          </button>
-        </div>
-
-        <div className="listen-settings-grid">
+        <div className="chapter-audio-actions">
           <label>
             Translation
             <select value={translation} onChange={(event) => setTranslation(event.target.value)}>
@@ -834,99 +556,45 @@ export function ChapterAudioPlayer({
               ))}
             </select>
           </label>
+          <label>
+            Speed
+            <select value={playbackRate} onChange={(event) => setPlaybackRate(Number(event.target.value))}>
+              {PLAYBACK_SPEEDS.map((speed) => <option key={speed} value={speed}>{speed.toFixed(2)}x</option>)}
+            </select>
+          </label>
           <button type="button" onClick={navigateToSelection}>Open</button>
         </div>
       </section>
 
-      <section className="listen-detail-grid">
-        <div className="listen-panel">
-          <div className="listen-panel-header">
-            <h3>AI Voice</h3>
-            <span>{sourceLabel}</span>
+      {!audioReady && !isResolvingAudio ? (
+        <section className="chapter-audio-missing" role="status">
+          <div>
+            <span>{translation}</span>
+            <h2>{missingMessage}</h2>
+            <p>Generate and upload this chapter once, then return here and press play.</p>
           </div>
-          <p>{aiReady ? `Ready from ${sourceLabel.toLowerCase()} with ${audioParts.length} audio segments stitched into one chapter.` : "Generated MP3 chapter narration appears here as soon as the Firebase upload is available."}</p>
-          <label>
-            Playback speed
-            <select value={aiRate} onChange={(event) => setAiRate(Number(event.target.value))}>
-              {AI_SPEEDS.map((speed) => <option key={speed} value={speed}>{speed.toFixed(2)}x</option>)}
-            </select>
-          </label>
-          <div className="listen-button-row">
-            <button type="button" className="listen-secondary-button" onClick={replayAi} disabled={!aiReady}>Replay chapter</button>
-            <button type="button" className="listen-secondary-button is-quiet" onClick={checkAgain} disabled={isResolvingAudioSource}>
-              {isResolvingAudioSource ? "Checking..." : "Check again"}
-            </button>
-          </div>
-        </div>
-
-        <div className="listen-panel">
-          <div className="listen-panel-header">
-            <h3>Device Voice</h3>
-            <span>{voices.length} voices</span>
-          </div>
-          <p>Device Voice — uses your browser/system voice. Keep this as a fallback when AI narration has not been uploaded yet.</p>
-          <label>
-            Voice
-            <select value={selectedVoiceURI} onChange={(event) => setSelectedVoiceURI(event.target.value)}>
-              {voices.map((voice) => (
-                <option key={voice.voiceURI} value={voice.voiceURI}>
-                  {isAppleVoice(voice) ? "Apple • " : ""}{voice.name} ({voice.lang})
-                </option>
-              ))}
-            </select>
-          </label>
-          <div className="listen-two-controls">
-            <label>
-              Rate
-              <select value={deviceRate} onChange={(event) => setDeviceRate(Number(event.target.value))}>
-                {DEVICE_RATES.map((rate) => <option key={rate} value={rate}>{rate.toFixed(2)}x</option>)}
-              </select>
-            </label>
-            <label>
-              Pitch
-              <input type="range" min="0.8" max="1.2" step="0.05" value={devicePitch} onChange={(event) => setDevicePitch(Number(event.target.value))} />
-            </label>
-          </div>
-        </div>
-      </section>
-
-      {(!manifest || missingFiles.length > 0 || errorMessage || deviceError || (audioSource === "local" && firebaseErrorMessage)) ? (
-        <section className="audio-message-band listen-missing-card" role="status">
-          <h3>{manifest ? "Listening note" : "Upload chapter narration"}</h3>
-          <p>{deviceError ?? errorMessage ?? (audioSource === "local" && firebaseErrorMessage ? `${missingAiMessage} Using local chapter audio fallback in development.` : missingAiMessage)}</p>
-          <div className="listen-command-stack" aria-label="Audio setup commands">
-            <span>Generate</span>
-            <pre>{generationCommand}</pre>
-            <span>Upload</span>
-            <pre>{uploadCommand}</pre>
-          </div>
-          <div className="listen-missing-actions">
-            <button type="button" className="listen-secondary-button" onClick={checkAgain} disabled={isResolvingAudioSource}>
-              {isResolvingAudioSource ? "Checking Firebase..." : "Check again"}
-            </button>
-            <span>Expected Firebase path: <code>{expectedFirebasePath}</code></span>
-          </div>
+          <dl>
+            <dt>Expected Firebase path</dt>
+            <dd><code>{expectedFirebaseManifestPath}</code></dd>
+            <dt>Generate</dt>
+            <dd><pre>{generationCommand}</pre></dd>
+            <dt>Upload</dt>
+            <dd><pre>{uploadCommand}</pre></dd>
+            {process.env.NODE_ENV !== "production" ? (
+              <>
+                <dt>Local fallback checked</dt>
+                <dd><code>{attemptedPath}</code></dd>
+              </>
+            ) : null}
+          </dl>
+          <button type="button" onClick={checkAgain}>Check again</button>
         </section>
       ) : null}
 
-      {isDev ? (
-        <section className="listen-debug-panel" aria-label="Firebase audio debug">
-          <div>
-            <strong>Firebase debug</strong>
-            <span>{firebaseDebug.manifestFound ? "manifest found" : "manifest missing"}</span>
-          </div>
-          <dl>
-            <dt>Expected manifest</dt>
-            <dd><code>{firebaseDebug.expectedManifestPath}</code></dd>
-            <dt>Audio segments</dt>
-            <dd>{firebaseDebug.segmentCount}</dd>
-            <dt>Resolved URLs</dt>
-            <dd>{firebaseDebug.audioUrls.length > 0 ? firebaseDebug.audioUrls.map((url, index) => <code key={url}>{index + 1}. {url}</code>) : "none"}</dd>
-            <dt>Local fallback</dt>
-            <dd>{firebaseDebug.localFallbackStatus} at <code>{attemptedPath}</code></dd>
-            <dt>Last Firebase message</dt>
-            <dd>{firebaseDebug.errorMessage ?? "none"}</dd>
-          </dl>
+      {audioReady ? (
+        <section className="chapter-audio-library-note" aria-label="Audio source">
+          <span>{audioParts.length} audio {audioParts.length === 1 ? "section" : "sections"}</span>
+          <button type="button" onClick={replayChapter}>Replay chapter</button>
         </section>
       ) : null}
 
@@ -935,7 +603,7 @@ export function ChapterAudioPlayer({
           <div>
             <span>{translation}</span>
             <h2>Now reading {chapterLabel}</h2>
-            <p>{activeMode === "ai" && aiReady ? "Follow the chapter while AI narration plays." : "Read devotionally here, or switch to Device Voice for system narration."}</p>
+            <p>Follow the chapter at your own pace while the narration carries the reading.</p>
           </div>
           <button type="button" className="listen-secondary-button is-quiet" onClick={() => setIsFocusMode((value) => !value)}>
             {isFocusMode ? "Show full page" : "Focus mode"}
@@ -958,26 +626,17 @@ export function ChapterAudioPlayer({
         )}
       </section>
 
-      {(status === "playing" || status === "paused" || deviceStatus === "playing" || deviceStatus === "paused") ? (
-        <div className="listen-mobile-mini" aria-label="Now playing">
+      {(status === "playing" || status === "paused") && audioReady ? (
+        <div className="chapter-sticky-player" aria-label="Now playing">
           <div>
             <strong>{chapterLabel}</strong>
-            <span>{activeMode === "ai" ? "AI Voice" : "Device Voice"}</span>
+            <span>{translation} chapter narration</span>
           </div>
-          <button
-            type="button"
-            onClick={() => {
-              if (activeMode === "ai") {
-                status === "playing" ? pauseAi() : playAi();
-              } else {
-                deviceStatus === "playing" ? pauseDevice() : void playDevice();
-              }
-            }}
-          >
-            {(activeMode === "ai" ? status : deviceStatus) === "playing" ? "Pause" : "Play"}
+          <button type="button" onClick={togglePlayback}>
+            {status === "playing" ? "Pause" : "Play"}
           </button>
         </div>
       ) : null}
-    </div>
+    </main>
   );
 }
