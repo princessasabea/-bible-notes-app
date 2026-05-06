@@ -210,6 +210,27 @@ Verify the library in the app:
 3. If John 3 is listed in `bible-audio/amp/library.json`, the page shows the main chapter play button.
 4. If it is not listed, the page shows the generate/upload action card.
 
+## In-app audio library admin
+
+For a friendlier local workflow, open:
+
+- `http://localhost:3000/admin/audio-library`
+
+The admin page lets you:
+
+- choose translation, book, and chapter
+- paste user-provided chapter text
+- optionally import a `.txt` file into the textarea
+- save text to `local-chapters/{translation}/{book}/{chapter}.txt`
+- generate OpenAI narration with the existing `audio:chapter` script
+- preview the first generated segment locally before upload
+- upload narration to Firebase with the existing `audio:upload` script
+- update `bible-audio/{translation}/library.json`
+
+This workflow does not scrape Bible text. You still provide the chapter text yourself. It is intended for preparing a private Firebase audio library; pressing play in the app streams prepared Firebase audio and does not call OpenAI live.
+
+The admin workflow prepares the future "Generate entire book" flow by using the same translation/book/chapter structure as the batch scripts.
+
 To test NKJV instead, create `local-chapters/nkjv/john/3.txt`, then run:
 
 - `npm run audio:chapter -- --translation nkjv --book John --chapter 3 --input local-chapters/nkjv/john/3.txt`

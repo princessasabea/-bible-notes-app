@@ -993,7 +993,7 @@ button:active,
   display: grid;
   grid-template-columns: repeat(7, minmax(0, 1fr));
   gap: 0.55rem;
-  align-items: end;
+  align-items: flex-end;
 }
 
 .mini-settings label {
@@ -3205,6 +3205,222 @@ button:active,
   padding: 0.62rem 0.9rem;
 }
 
+.admin-audio-page {
+  width: min(100%, 1120px);
+  margin: 1rem auto 4rem;
+  padding: 0 0.75rem;
+  display: grid;
+  gap: 1rem;
+}
+
+.admin-audio-hero,
+.admin-audio-card {
+  border: 1px solid #eadcc4;
+  border-radius: 26px;
+  background: #fffaf2;
+  box-shadow: 0 18px 42px rgba(74, 52, 32, 0.1);
+}
+
+.admin-audio-hero {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  align-items: flex-end;
+  padding: clamp(1.1rem, 3vw, 1.7rem);
+  background:
+    linear-gradient(135deg, rgba(38, 61, 54, 0.08), transparent 45%),
+    #fffaf2;
+}
+
+.admin-audio-hero span,
+.admin-audio-pack strong {
+  display: inline-flex;
+  width: fit-content;
+  border-radius: 999px;
+  background: #263d36;
+  color: #fff8ec;
+  padding: 0.3rem 0.62rem;
+  font-size: 0.74rem;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.admin-audio-hero h1 {
+  margin-top: 0.55rem;
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: clamp(2.4rem, 7vw, 4.8rem);
+  line-height: 0.95;
+  color: #2f251c;
+}
+
+.admin-audio-hero p {
+  max-width: 720px;
+  margin-top: 0.65rem;
+  color: #735f49;
+  line-height: 1.65;
+}
+
+.admin-audio-pack {
+  min-width: min(100%, 280px);
+  border: 1px solid #eadcc4;
+  border-radius: 20px;
+  background: #fffdf8;
+  padding: 1rem;
+  display: grid;
+  gap: 0.65rem;
+}
+
+.admin-audio-pack code,
+.admin-audio-status code {
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+.admin-audio-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.15fr) minmax(320px, 0.85fr);
+  gap: 1rem;
+}
+
+.admin-audio-card {
+  padding: clamp(1rem, 3vw, 1.35rem);
+  display: grid;
+  gap: 1rem;
+  align-content: start;
+}
+
+.admin-audio-card h2 {
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: 1.7rem;
+  color: #2f251c;
+}
+
+.admin-audio-controls {
+  display: grid;
+  grid-template-columns: 0.85fr 1.15fr 0.7fr;
+  gap: 0.75rem;
+}
+
+.admin-audio-card label {
+  color: #735f49;
+  font-weight: 800;
+}
+
+.admin-audio-card select,
+.admin-audio-card textarea,
+.admin-audio-file input {
+  border-color: #dfcfb8;
+  background: #fffdf8;
+  color: #2f251c;
+}
+
+.admin-audio-card textarea {
+  min-height: 380px;
+  resize: vertical;
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: 1.05rem;
+  line-height: 1.8;
+}
+
+.admin-audio-file {
+  border: 1px dashed #d9c4a4;
+  border-radius: 18px;
+  padding: 0.85rem;
+  background: #fffdf8;
+}
+
+.admin-audio-safeguards {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.admin-audio-safeguards span,
+.admin-audio-steps li {
+  border-radius: 999px;
+  background: #efe1ca;
+  color: #4b3827;
+  padding: 0.38rem 0.62rem;
+  font-size: 0.8rem;
+  font-weight: 800;
+}
+
+.admin-audio-steps {
+  display: grid;
+  gap: 0.5rem;
+  padding: 0;
+  margin: 0;
+  list-style: none;
+}
+
+.admin-audio-steps li.is-active {
+  background: #263d36;
+  color: #fff8ec;
+}
+
+.admin-audio-actions {
+  display: grid;
+  gap: 0.65rem;
+}
+
+.admin-audio-actions button {
+  min-height: 46px;
+  border: 0;
+  border-radius: 999px;
+  background: #263d36;
+  color: #fff8ec;
+  font-weight: 900;
+}
+
+.admin-audio-actions button.is-primary {
+  background: #f4d8a8;
+  color: #172a27;
+}
+
+.admin-audio-actions button:disabled {
+  opacity: 0.52;
+  cursor: not-allowed;
+}
+
+.admin-audio-status,
+.admin-audio-preview {
+  border: 1px solid #eadcc4;
+  border-radius: 18px;
+  background: #fffdf8;
+  padding: 0.9rem;
+  display: grid;
+  gap: 0.5rem;
+  color: #735f49;
+}
+
+.admin-audio-status strong,
+.admin-audio-preview strong {
+  color: #2f251c;
+}
+
+.admin-audio-warning {
+  color: #8b5d16;
+}
+
+.admin-audio-error {
+  color: #a33125;
+}
+
+.admin-audio-preview audio {
+  width: 100%;
+}
+
+.admin-audio-log {
+  max-height: 260px;
+  overflow: auto;
+  white-space: pre-wrap;
+  border-radius: 16px;
+  background: #1f2d29;
+  color: #fff8ec;
+  padding: 0.9rem;
+}
+
 @media (max-width: 760px) {
   .audio-listening-page {
     padding: 0 0 5.5rem;
@@ -3315,5 +3531,20 @@ button:active,
   .chapter-audio-library-note {
     align-items: stretch;
     flex-direction: column;
+  }
+
+  .admin-audio-hero,
+  .admin-audio-grid,
+  .admin-audio-controls {
+    grid-template-columns: 1fr;
+  }
+
+  .admin-audio-hero {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .admin-audio-card textarea {
+    min-height: 300px;
   }
 }
