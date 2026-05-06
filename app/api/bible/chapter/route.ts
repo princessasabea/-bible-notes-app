@@ -2,10 +2,13 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { assertSameOrigin, sanitizeText } from "@/lib/security";
 
-const BIBLE_IDS = {
-  NKJV: "63097d2a0a2f7db3-01",
-  AMP: "a81b73293d3080c9-01"
-} as const;
+const BIBLE_IDS: Record<string, string | undefined> = {
+  AMP: process.env.AMP_BIBLE_ID || "a81b73293d3080c9-01",
+  AMPC: process.env.AMPC_BIBLE_ID,
+  NKJV: process.env.NKJV_BIBLE_ID || "63097d2a0a2f7db3-01",
+  ESV: process.env.ESV_BIBLE_ID,
+  KJV: process.env.KJV_BIBLE_ID
+};
 
 const BOOK_TO_CODE: Record<string, string> = {
   Genesis: "GEN",
@@ -79,7 +82,7 @@ const BOOK_TO_CODE: Record<string, string> = {
 const schema = z.object({
   book: z.string().min(1).transform(sanitizeText),
   chapter: z.number().int().min(1),
-  translation: z.enum(["AMP", "NKJV"]).default("AMP")
+  translation: z.string().min(1).transform((value) => sanitizeText(value).toUpperCase()).default("AMP")
 });
 
 function stripHtml(input: string): string {
@@ -106,6 +109,14 @@ export async function POST(request: Request): Promise<Response> {
 
     const chapterId = `${bookCode}.${parsed.data.chapter}`;
     const bibleId = BIBLE_IDS[parsed.data.translation];
+    if (!bibleId) {
+      return NextResponse.json({
+        status: "unavailable",
+        message: `${parsed.data.translation} chapter text is not configured for device voice yet.`,
+        chapterId,
+        translation: parsed.data.translation
+      });
+    }
 
     const url = `https://rest.api.bible/v1/bibles/${bibleId}/chapters/${encodeURIComponent(
       chapterId

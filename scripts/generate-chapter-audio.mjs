@@ -8,7 +8,7 @@ const DEFAULT_MODEL = "gpt-4o-mini-tts";
 const DEFAULT_VOICE = "onyx";
 const DEFAULT_SPEED = 0.9;
 const DEFAULT_INSTRUCTIONS =
-  "Read slowly, warmly, and reverently like a calm Scripture narrator. Do not announce chunk numbers, file parts, or technical labels. Use natural pauses between verses and sentences. Keep the tone peaceful, clear, and devotional.";
+  "Read slowly, warmly, and reverently like a calm Scripture narrator. Do not announce technical labels, chunk numbers, filenames, or metadata. Use natural pauses between verses and sentences. Keep the tone peaceful, devotional, emotionally grounded, and immersive.";
 
 const usage = `
 Usage:

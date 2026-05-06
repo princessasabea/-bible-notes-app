@@ -19,6 +19,8 @@ export async function POST(req: Request) {
       model: "gpt-4o-mini-tts",
       voice: "alloy",
       input: text,
+      instructions:
+        "Read slowly, warmly, and reverently like a calm Scripture narrator. Do not announce technical labels, chunk numbers, filenames, or metadata. Use natural pauses between verses and sentences. Keep the tone peaceful, devotional, emotionally grounded, and immersive.",
     });
 
     const audioBuffer = Buffer.from(await speech.arrayBuffer());
