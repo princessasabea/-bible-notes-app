@@ -210,6 +210,100 @@ Verify the library in the app:
 3. If John 3 is listed in `bible-audio/amp/library.json`, the page shows the main chapter play button.
 4. If it is not listed, the page shows the generate/upload action card.
 
+## Full-book AMP audio from Bible API
+
+For the Gospel of John, you can prepare the whole AMP listening library without manually creating `local-chapters/amp/john/*.txt`. The book generator fetches chapter text from API.Bible into a temporary folder, cleans it for narration, calls OpenAI TTS once per generated segment, and writes the same local audio structure the rest of the app already uses.
+
+Required local-only secrets:
+
+- `BIBLE_API_KEY`
+- `AMP_BIBLE_ID`
+- `OPENAI_API_KEY`
+
+Put these in `.env.local` or export them in your shell. Do not use `NEXT_PUBLIC_` for Bible API or OpenAI keys.
+
+Preview the full John generation plan without fetching Bible text or calling OpenAI:
+
+- `npm run audio:book -- --translation amp --book John --source api --dry-run`
+
+Generate all 21 chapters of John:
+
+- `npm run audio:book -- --translation amp --book John --source api`
+
+Generated output:
+
+```text
+generated-audio/
+  amp/
+    john/
+      1/
+        manifest.json
+        audio/
+          segment-1.mp3
+      2/
+        manifest.json
+        audio/
+          segment-1.mp3
+      ...
+      21/
+        manifest.json
+        audio/
+          segment-1.mp3
+```
+
+The generator skips chapters that already have `manifest.json` and `audio/segment-*.mp3`. To regenerate everything, add `--force`:
+
+- `npm run audio:book -- --translation amp --book John --source api --force`
+
+Upload every generated John chapter to Firebase:
+
+- `npm run audio:upload:book -- --translation amp --book John --service-account ./serviceAccountKey.json`
+
+Preview the upload without changing Firebase:
+
+- `npm run audio:upload:book -- --translation amp --book John --service-account ./serviceAccountKey.json --dry-run`
+
+Firebase Storage should end up with:
+
+```text
+bible-audio/
+  amp/
+    library.json
+    john/
+      1/
+        manifest.json
+        audio/
+          segment-1.mp3
+      2/
+        manifest.json
+        audio/
+          segment-1.mp3
+      ...
+      21/
+        manifest.json
+        audio/
+          segment-1.mp3
+```
+
+The uploader updates `bible-audio/amp/library.json` as chapters upload. When all John chapters are ready, the index should include:
+
+```json
+{
+  "translation": "amp",
+  "books": {
+    "john": [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21]
+  }
+}
+```
+
+Open the full book listening page:
+
+- `http://localhost:3000/audio/john?translation=amp`
+
+Open a chapter directly:
+
+- `http://localhost:3000/audio/john/3?translation=amp`
+
 ## In-app audio library admin
 
 For a friendlier local workflow, open:
