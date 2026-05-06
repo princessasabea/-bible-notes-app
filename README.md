@@ -44,13 +44,13 @@ Example for John 3:
 5. Open the player:
    - `http://localhost:3000/audio/john/3?translation=amp`
 
-Generated files are written to `generated-audio/amp/john/3/` with `part-1.mp3`, `part-2.mp3`, and `manifest.json`.
+Generated files are written to `generated-audio/amp/john/3/` with `manifest.json` and `audio/segment-1.mp3`, `audio/segment-2.mp3`, and any remaining segments.
 
 To listen locally on macOS:
 
-- `afplay generated-audio/amp/john/3/part-1.mp3`
+- `afplay generated-audio/amp/john/3/audio/segment-1.mp3`
 
-To use AMPC instead, change both `amp` path segments and `--translation amp` to `ampc`.
+To use AMPC, NKJV, or another translation, change both the local path segments and `--translation amp` to the matching lowercase translation slug, such as `ampc` or `nkjv`.
 
 ## Firebase Storage chapter audio
 
@@ -65,6 +65,16 @@ Add these values to `.env.local` for local development:
 - `NEXT_PUBLIC_FIREBASE_APP_ID`
 
 Add the same variables in Vercel under Project Settings -> Environment Variables. These are Firebase web config values and are okay to expose to the browser, but Firebase Storage rules should still protect access.
+
+For uploads from your computer, the `audio:upload` script uses Firebase Admin credentials. Use one of these local-only options:
+
+- `FIREBASE_SERVICE_ACCOUNT_PATH=./serviceAccountKey.json`
+- `GOOGLE_APPLICATION_CREDENTIALS=./serviceAccountKey.json`
+- `FIREBASE_SERVICE_ACCOUNT_KEY='{"project_id":"..."}'`
+- `FIREBASE_SERVICE_ACCOUNT_KEY_BASE64='base64-json'`
+- `FIREBASE_PROJECT_ID`, `FIREBASE_CLIENT_EMAIL`, and `FIREBASE_PRIVATE_KEY`
+
+Do not commit service account files or keys. `.env`, `.env.local`, `serviceAccountKey.json`, `local-chapters/`, and `generated-audio/` are ignored by git.
 
 Firebase Storage folder structure:
 
@@ -101,13 +111,22 @@ To upload John 3:
 
 1. Generate local audio:
    - `npm run audio:chapter -- --translation amp --book John --chapter 3 --input local-chapters/amp/john/3.txt`
-2. In Firebase Console -> Storage, create `bible-audio/amp/john/3/`.
-3. Upload `generated-audio/amp/john/3/manifest.json`.
-4. Create `bible-audio/amp/john/3/audio/`.
-5. Upload `generated-audio/amp/john/3/audio/segment-1.mp3`, `segment-2.mp3`, and any remaining segments.
-6. Test:
+2. Upload the generated manifest and audio segments:
+   - `npm run audio:upload -- --translation amp --book John --chapter 3`
+3. The script verifies that `manifest.json` and every `audio/segment-*.mp3` file exists in Firebase Storage and that their download URLs are reachable.
+4. Test:
    - `npm run dev`
    - `http://localhost:3000/audio/john/3?translation=amp`
+
+To upload without making changes, preview the plan first:
+
+- `npm run audio:upload -- --translation amp --book John --chapter 3 --dry-run`
+
+To test NKJV instead, create `local-chapters/nkjv/john/3.txt`, then run:
+
+- `npm run audio:chapter -- --translation nkjv --book John --chapter 3 --input local-chapters/nkjv/john/3.txt`
+- `npm run audio:upload -- --translation nkjv --book John --chapter 3`
+- `http://localhost:3000/audio/john/3?translation=nkjv`
 
 To test AMPC instead, use `bible-audio/ampc/john/3/` and open:
 
