@@ -13,6 +13,8 @@ const API_BIBLE_ROOT = "https://rest.api.bible/v1";
 const BOOKS = {
   john: { name: "John", code: "JHN", chapters: 21 },
   romans: { name: "Romans", code: "ROM", chapters: 16 },
+  psalms: { name: "Psalms", code: "PSA", chapters: 150 },
+  proverbs: { name: "Proverbs", code: "PRO", chapters: 31 },
   ephesians: { name: "Ephesians", code: "EPH", chapters: 6 },
   philippians: { name: "Philippians", code: "PHP", chapters: 4 },
   james: { name: "James", code: "JAS", chapters: 5 }

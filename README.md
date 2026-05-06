@@ -304,6 +304,97 @@ Open a chapter directly:
 
 - `http://localhost:3000/audio/john/3?translation=amp`
 
+## Expanded AMP listening pack
+
+The same full-book API workflow supports these AMP books:
+
+- Romans
+- Psalms
+- Proverbs
+- Philippians
+- James
+
+Generate one full book:
+
+- `npm run audio:book -- --translation amp --book Romans --source api`
+- `npm run audio:book -- --translation amp --book Psalms --source api`
+- `npm run audio:book -- --translation amp --book Proverbs --source api`
+- `npm run audio:book -- --translation amp --book Philippians --source api`
+- `npm run audio:book -- --translation amp --book James --source api`
+
+Upload one full book:
+
+- `npm run audio:upload:book -- --translation amp --book Romans --service-account ./serviceAccountKey.json`
+- `npm run audio:upload:book -- --translation amp --book Psalms --service-account ./serviceAccountKey.json`
+- `npm run audio:upload:book -- --translation amp --book Proverbs --service-account ./serviceAccountKey.json`
+- `npm run audio:upload:book -- --translation amp --book Philippians --service-account ./serviceAccountKey.json`
+- `npm run audio:upload:book -- --translation amp --book James --service-account ./serviceAccountKey.json`
+
+Generate the whole pack in one command:
+
+- `npm run audio:books -- --translation amp --books Romans,Psalms,Proverbs,Philippians,James --source api`
+
+Upload the whole pack in one command:
+
+- `npm run audio:upload:books -- --translation amp --books Romans,Psalms,Proverbs,Philippians,James --service-account ./serviceAccountKey.json`
+
+Dry-run first, especially for Psalms:
+
+- `npm run audio:books -- --translation amp --books Romans,Psalms,Proverbs,Philippians,James --source api --dry-run`
+- `npm run audio:upload:books -- --translation amp --books Romans,Psalms,Proverbs,Philippians,James --service-account ./serviceAccountKey.json --dry-run`
+
+Estimated time and cost note: this pack is much larger than John. Psalms alone has 150 chapters, so full generation can take a long time and will make many OpenAI TTS requests. Always run `--dry-run` first, then consider generating one book at a time.
+
+Firebase paths:
+
+```text
+bible-audio/
+  amp/
+    library.json
+    romans/{chapter}/manifest.json
+    romans/{chapter}/audio/segment-1.mp3
+    psalms/{chapter}/manifest.json
+    psalms/{chapter}/audio/segment-1.mp3
+    proverbs/{chapter}/manifest.json
+    proverbs/{chapter}/audio/segment-1.mp3
+    philippians/{chapter}/manifest.json
+    philippians/{chapter}/audio/segment-1.mp3
+    james/{chapter}/manifest.json
+    james/{chapter}/audio/segment-1.mp3
+```
+
+After upload, `bible-audio/amp/library.json` should include each prepared book:
+
+```json
+{
+  "translation": "amp",
+  "books": {
+    "john": [1, 2, 3],
+    "romans": [1, 2, 3],
+    "psalms": [1, 2, 3],
+    "proverbs": [1, 2, 3],
+    "philippians": [1, 2, 3],
+    "james": [1, 2, 3]
+  }
+}
+```
+
+Book routes to test:
+
+- `http://localhost:3000/audio/romans?translation=amp`
+- `http://localhost:3000/audio/psalms?translation=amp`
+- `http://localhost:3000/audio/proverbs?translation=amp`
+- `http://localhost:3000/audio/philippians?translation=amp`
+- `http://localhost:3000/audio/james?translation=amp`
+
+Chapter routes to test:
+
+- `http://localhost:3000/audio/romans/1?translation=amp`
+- `http://localhost:3000/audio/psalms/1?translation=amp`
+- `http://localhost:3000/audio/proverbs/1?translation=amp`
+- `http://localhost:3000/audio/philippians/1?translation=amp`
+- `http://localhost:3000/audio/james/1?translation=amp`
+
 ## In-app audio library admin
 
 For a friendlier local workflow, open:

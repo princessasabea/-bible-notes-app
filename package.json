@@ -7,9 +7,11 @@
     "build": "next build",
     "audio:chapter": "node scripts/generate-chapter-audio.mjs",
     "audio:book": "node scripts/generate-book-audio.mjs",
+    "audio:books": "node scripts/generate-books-audio.mjs",
     "audio:batch": "node scripts/batch-chapter-audio.mjs",
     "audio:upload": "node scripts/upload-chapter-audio.mjs",
     "audio:upload:book": "node scripts/upload-book-audio.mjs",
+    "audio:upload:books": "node scripts/upload-books-audio.mjs",
     "audio:upload:batch": "node scripts/upload-batch-chapter-audio.mjs",
     "start": "next start",
     "test": "vitest run"
