@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { useBibleAudio } from "@/components/bible-audio-store";
 import { BIBLE_BOOKS } from "@/lib/bible/books";
 import { loadFirebaseAudioLibrary, type FirebaseAudioLibrary } from "@/lib/audio/firebase-chapter-audio";
 
@@ -30,6 +31,7 @@ function displayBookFromSlug(value: string): string {
 
 export function BookAudioLibrary({ initialBook, requestedTranslation }: Props): React.ReactElement {
   const router = useRouter();
+  const bibleAudio = useBibleAudio();
   const [translation, setTranslation] = useState(requestedTranslation.toUpperCase());
   const [library, setLibrary] = useState<FirebaseAudioLibrary | null>(null);
   const [status, setStatus] = useState<LibraryStatus>("loading");
@@ -49,6 +51,14 @@ export function BookAudioLibrary({ initialBook, requestedTranslation }: Props): 
   const chapterCount = bookMeta.chapters;
   const chapters = useMemo(() => Array.from({ length: chapterCount }, (_, index) => index + 1), [chapterCount]);
   const readyCount = readyChapters.length;
+  const bookQueueItems = useMemo(
+    () => chapters.map((chapter) => ({
+      translation: translationSlug,
+      book: bookSlug,
+      chapter
+    })),
+    [bookSlug, chapters, translationSlug]
+  );
 
   useEffect(() => {
     let cancelled = false;
@@ -95,6 +105,18 @@ export function BookAudioLibrary({ initialBook, requestedTranslation }: Props): 
     : readyCount > 0
       ? `${readyCount} of ${chapterCount} chapters ready`
       : "Narration not prepared yet";
+
+  const addBookToQueue = (): void => {
+    bibleAudio.addManyToQueue(bookQueueItems);
+  };
+
+  const createBookPlaylist = (): void => {
+    const name = window.prompt("Playlist name", `${bookName} Study`);
+    if (!name) {
+      return;
+    }
+    bibleAudio.createPlaylist(name, bookQueueItems);
+  };
 
   return (
     <main className="book-audio-page">
@@ -153,6 +175,15 @@ export function BookAudioLibrary({ initialBook, requestedTranslation }: Props): 
         <button type="button" onClick={() => setRefreshCount((count) => count + 1)}>
           Check library
         </button>
+        <button type="button" onClick={addBookToQueue}>
+          Add whole book to queue
+        </button>
+        <button type="button" onClick={createBookPlaylist}>
+          Create playlist from book
+        </button>
+        <button type="button" onClick={() => bibleAudio.setQueueOpen(!bibleAudio.queueOpen)}>
+          Queue ({bibleAudio.queue.length})
+        </button>
       </section>
 
       <section className="book-now-playing" aria-live="polite">
@@ -200,16 +231,68 @@ export function BookAudioLibrary({ initialBook, requestedTranslation }: Props): 
                   <strong>{chapter}</strong>
                 </div>
                 <p>{isReady ? "Narration ready" : status === "loading" ? "Checking..." : "Not ready yet"}</p>
-                {isReady ? (
-                  <Link href={`/audio/${bookSlug}/${chapter}?translation=${translationSlug}`}>Play</Link>
-                ) : (
-                  <button type="button" disabled>Not ready</button>
-                )}
+                <div className="book-chapter-actions">
+                  {isReady ? (
+                    <Link href={`/audio/${bookSlug}/${chapter}?translation=${translationSlug}`}>Play</Link>
+                  ) : (
+                    <button type="button" disabled>Not ready</button>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => bibleAudio.addToQueue({ translation: translationSlug, book: bookSlug, chapter })}
+                  >
+                    Queue
+                  </button>
+                </div>
               </article>
             );
           })}
         </div>
       </section>
+
+      {bibleAudio.queueOpen ? (
+        <aside className="audio-queue-drawer" aria-label="Listening queue">
+          <div className="audio-queue-header">
+            <div>
+              <span>Up next</span>
+              <h2>Queue</h2>
+            </div>
+            <button type="button" onClick={() => bibleAudio.setQueueOpen(false)}>Close</button>
+          </div>
+          {bibleAudio.queue.length === 0 ? (
+            <p className="audio-queue-empty">Your queue is empty. Add chapters from this book or any chapter page.</p>
+          ) : (
+            <div className="audio-queue-list">
+              {bibleAudio.queue.map((item, index) => (
+                <article key={item.id} className="audio-queue-item">
+                  <div>
+                    <strong>{item.title}</strong>
+                    <span>{item.translation.toUpperCase()} · #{index + 1}</span>
+                  </div>
+                  <div className="audio-queue-actions">
+                    <button type="button" onClick={() => bibleAudio.moveQueueItem(item.id, -1)} disabled={index === 0}>Up</button>
+                    <button type="button" onClick={() => bibleAudio.moveQueueItem(item.id, 1)} disabled={index === bibleAudio.queue.length - 1}>Down</button>
+                    <button type="button" onClick={() => bibleAudio.removeFromQueue(item.id)}>Remove</button>
+                  </div>
+                </article>
+              ))}
+            </div>
+          )}
+          {bibleAudio.queue.length > 0 ? <button type="button" className="audio-queue-clear" onClick={bibleAudio.clearQueue}>Clear queue</button> : null}
+          {bibleAudio.playlists.length > 0 ? (
+            <div className="audio-playlist-list">
+              <span>Playlists</span>
+              {bibleAudio.playlists.map((playlist) => (
+                <article key={playlist.id}>
+                  <strong>{playlist.name}</strong>
+                  <p>{playlist.items.length} chapters</p>
+                  <button type="button" onClick={() => bibleAudio.addManyToQueue(playlist.items)}>Add to queue</button>
+                </article>
+              ))}
+            </div>
+          ) : null}
+        </aside>
+      ) : null}
     </main>
   );
 }

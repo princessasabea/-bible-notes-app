@@ -253,7 +253,9 @@ async function main() {
       sourceCharacterCount: chapterText.length,
       narrationCharacterCount: narrationText.length
     },
-    audioParts
+    audioParts,
+    audio: audioParts,
+    verses: []
   };
 
   const manifestPath = path.join(chapterDir, "manifest.json");

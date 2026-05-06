@@ -22,7 +22,9 @@ type FirebaseManifestShape = {
   instructions?: string;
   generatedAt?: string;
   audioParts?: Array<string | FirebaseManifestPart>;
+  audio?: Array<string | FirebaseManifestPart>;
   segments?: Array<string | FirebaseManifestPart>;
+  verses?: ChapterAudioManifest["verses"];
 };
 
 export type FirebaseChapterAudioResult = {
@@ -196,7 +198,7 @@ export async function loadFirebaseChapterAudioManifest(
 
     const parsed: unknown = await response.json();
     const manifestObject = isObject(parsed) ? parsed as FirebaseManifestShape : {};
-    const parts = manifestObject.audioParts ?? manifestObject.segments ?? [];
+    const parts = manifestObject.audioParts ?? manifestObject.audio ?? manifestObject.segments ?? [];
     const manifestTranslation = slugifyAudioPath(manifestObject.translation ?? translationSlug);
     const manifestBook = manifestObject.book ?? displayBookFromSlug(bookSlug);
     const manifestChapter = manifestObject.chapter ?? chapter;
@@ -226,7 +228,8 @@ export async function loadFirebaseChapterAudioManifest(
         speed: manifestObject.speed,
         instructions: manifestObject.instructions,
         generatedAt: manifestObject.generatedAt,
-        audioParts
+        audioParts,
+        verses: Array.isArray(manifestObject.verses) ? manifestObject.verses : []
       },
       expectedManifestPath,
       expectedFolderPath,

@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { useBibleAudio } from "@/components/bible-audio-store";
 import { BIBLE_BOOKS } from "@/lib/bible/books";
 import { splitChapterTextIntoVerses } from "@/lib/bible/chapter-text";
 import type { ChapterAudioManifest } from "@/lib/audio/chapter-audio";
@@ -61,6 +62,20 @@ export function ChapterAudioPlayer({
   requestedTranslation
 }: Props): React.ReactElement {
   const router = useRouter();
+  const bibleAudio = useBibleAudio();
+  const {
+    addToQueue,
+    clearQueue,
+    moveQueueItem,
+    queue,
+    queueOpen,
+    removeFromQueue,
+    setCurrentChapter,
+    setPlaybackSpeed: persistPlaybackSpeed,
+    setPlaybackStatus,
+    setProgressSeconds,
+    setQueueOpen
+  } = bibleAudio;
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const autoPlayRef = useRef(false);
   const isPlaybackRequestPendingRef = useRef(false);
@@ -82,7 +97,7 @@ export function ChapterAudioPlayer({
   const [partIndex, setPartIndex] = useState(0);
   const [currentTime, setCurrentTime] = useState(0);
   const [durations, setDurations] = useState<number[]>(() => localManifest?.audioParts.map(() => Number.NaN) ?? []);
-  const [playbackRate, setPlaybackRate] = useState(1);
+  const [playbackRate, setPlaybackRate] = useState(bibleAudio.playbackSpeed);
   const [audioRetryCount, setAudioRetryCount] = useState(0);
   const [scriptureText, setScriptureText] = useState("");
   const [scriptureStatus, setScriptureStatus] = useState<ScriptureStatus>("idle");
@@ -105,6 +120,12 @@ export function ChapterAudioPlayer({
     () => BIBLE_BOOKS.find((book) => book.name === selectedBook) ?? BIBLE_BOOKS.find((book) => book.name === activeBook) ?? BIBLE_BOOKS[0],
     [activeBook, selectedBook]
   );
+  const activeBookSlug = slugify(activeBook);
+  const activeTranslationSlug = requestedTranslation.toLowerCase();
+  const activeBookMeta = useMemo(
+    () => BIBLE_BOOKS.find((book) => slugify(book.name) === activeBookSlug) ?? selectedBookMeta,
+    [activeBookSlug, selectedBookMeta]
+  );
 
   const knownDuration = durations.length > 0 && durations.every((duration) => Number.isFinite(duration));
   const chapterDuration = knownDuration ? sumDurations(durations, durations.length) : Number.NaN;
@@ -115,6 +136,41 @@ export function ChapterAudioPlayer({
     : activePart && audioRef.current?.duration
       ? Math.min(100, Math.max(0, (currentTime / audioRef.current.duration) * 100))
       : 0;
+  const fallbackSegmentDuration = audioRef.current?.duration ?? Number.NaN;
+  const estimatedVerseIndex = scriptureVerses.length > 0 && (
+    (knownDuration && chapterDuration > 0) ||
+    (Number.isFinite(fallbackSegmentDuration) && fallbackSegmentDuration > 0)
+  )
+    ? Math.min(
+      scriptureVerses.length - 1,
+      Math.max(0, Math.floor((
+        knownDuration && chapterDuration > 0
+          ? chapterElapsed / chapterDuration
+          : currentTime / fallbackSegmentDuration
+      ) * scriptureVerses.length))
+    )
+    : 0;
+  const estimatedVerse = scriptureVerses[estimatedVerseIndex] ?? null;
+
+  useEffect(() => {
+    setPlaybackRate(bibleAudio.playbackSpeed);
+  }, [bibleAudio.playbackSpeed]);
+
+  useEffect(() => {
+    setCurrentChapter({
+      translation: activeTranslationSlug,
+      book: activeBookSlug,
+      chapter: activeChapter
+    });
+  }, [activeBookSlug, activeChapter, activeTranslationSlug, setCurrentChapter]);
+
+  useEffect(() => {
+    setPlaybackStatus(status);
+  }, [setPlaybackStatus, status]);
+
+  useEffect(() => {
+    setProgressSeconds(chapterElapsed);
+  }, [chapterElapsed, setProgressSeconds]);
 
   const resetAudioElement = useCallback((): void => {
     const audio = audioRef.current;
@@ -383,6 +439,12 @@ export function ChapterAudioPlayer({
       window.localStorage.removeItem(progressKey);
       setStatus("ended");
       setCurrentTime(audio.duration || currentTime);
+
+      const nextQueued = queue[0];
+      if (nextQueued) {
+        removeFromQueue(nextQueued.id);
+        router.push(`/audio/${nextQueued.book}/${nextQueued.chapter}?translation=${nextQueued.translation}`);
+      }
     };
 
     audio.addEventListener("loadedmetadata", handleLoadedMetadata);
@@ -400,7 +462,7 @@ export function ChapterAudioPlayer({
       audio.removeEventListener("error", handleError);
       audio.removeEventListener("ended", handleEnded);
     };
-  }, [audioParts.length, currentTime, loadPart, partIndex, progressKey]);
+  }, [audioParts.length, currentTime, loadPart, partIndex, progressKey, queue, removeFromQueue, router]);
 
   const playChapter = (): void => {
     const audio = audioRef.current;
@@ -455,6 +517,15 @@ export function ChapterAudioPlayer({
     loadPart(0, status === "playing");
   };
 
+  const seekBySeconds = (seconds: number): void => {
+    const audio = audioRef.current;
+    if (!audio || !audioReady) {
+      return;
+    }
+
+    audio.currentTime = Math.max(0, Math.min(audio.duration || 0, audio.currentTime + seconds));
+  };
+
   const handleSeek = (value: number): void => {
     const audio = audioRef.current;
     if (!audio || !audioReady) {
@@ -492,6 +563,55 @@ export function ChapterAudioPlayer({
     const bookSlug = slugify(selectedBook);
     const chapter = Math.max(1, Math.min(Number(selectedChapter) || 1, selectedBookMeta.chapters));
     router.push(`/audio/${bookSlug}/${chapter}?translation=${translation.toLowerCase()}`);
+  };
+
+  const navigateChapter = (offset: -1 | 1): void => {
+    const target = activeChapter + offset;
+    if (target < 1 || target > activeBookMeta.chapters) {
+      return;
+    }
+
+    resetAudioElement();
+    router.push(`/audio/${activeBookSlug}/${target}?translation=${activeTranslationSlug}`);
+  };
+
+  const jumpEstimatedVerse = (offset: -1 | 1): void => {
+    const audio = audioRef.current;
+    if (!audio || !audioReady || scriptureVerses.length === 0) {
+      return;
+    }
+
+    const targetIndex = Math.min(scriptureVerses.length - 1, Math.max(0, estimatedVerseIndex + offset));
+    const targetPercent = (targetIndex / scriptureVerses.length) * 100;
+    if (knownDuration && chapterDuration > 0) {
+      handleSeek(targetPercent);
+      return;
+    }
+
+    audio.currentTime = ((audio.duration || 0) * targetPercent) / 100;
+  };
+
+  const addCurrentToQueue = (): void => {
+    addToQueue({
+      translation: activeTranslationSlug,
+      book: activeBookSlug,
+      chapter: activeChapter
+    });
+  };
+
+  const playNextQueued = (): void => {
+    const nextQueued = queue[0];
+    if (!nextQueued) {
+      return;
+    }
+    removeFromQueue(nextQueued.id);
+    resetAudioElement();
+    router.push(`/audio/${nextQueued.book}/${nextQueued.chapter}?translation=${nextQueued.translation}`);
+  };
+
+  const handlePlaybackRateChange = (value: number): void => {
+    setPlaybackRate(value);
+    persistPlaybackSpeed(value);
   };
 
   const checkAgain = (): void => {
@@ -536,6 +656,19 @@ export function ChapterAudioPlayer({
           <strong>{status === "playing" ? "II" : "▶"}</strong>
         </button>
 
+        <div className="chapter-transport-grid" aria-label="Chapter playback controls">
+          <button type="button" onClick={() => navigateChapter(-1)} disabled={activeChapter <= 1}>Previous chapter</button>
+          <button type="button" onClick={() => seekBySeconds(-15)} disabled={!audioReady}>-15 sec</button>
+          <button type="button" onClick={() => jumpEstimatedVerse(-1)} disabled={!audioReady || scriptureVerses.length === 0}>Previous verse</button>
+          <button type="button" onClick={() => jumpEstimatedVerse(1)} disabled={!audioReady || scriptureVerses.length === 0}>Next verse</button>
+          <button type="button" onClick={() => seekBySeconds(15)} disabled={!audioReady}>+15 sec</button>
+          <button type="button" onClick={() => navigateChapter(1)} disabled={activeChapter >= activeBookMeta.chapters}>Next chapter</button>
+        </div>
+        <p className="chapter-estimated-note">
+          Verse navigation is estimated until exact verse timestamps are added to chapter manifests.
+          {estimatedVerse ? ` Near verse ${estimatedVerse.number}.` : null}
+        </p>
+
         <div className="chapter-progress-wrap">
           <input
             type="range"
@@ -576,11 +709,15 @@ export function ChapterAudioPlayer({
           </label>
           <label>
             Speed
-            <select value={playbackRate} onChange={(event) => setPlaybackRate(Number(event.target.value))}>
+            <select value={playbackRate} onChange={(event) => handlePlaybackRateChange(Number(event.target.value))}>
               {PLAYBACK_SPEEDS.map((speed) => <option key={speed} value={speed}>{speed.toFixed(2)}x</option>)}
             </select>
           </label>
           <button type="button" onClick={navigateToSelection}>Open</button>
+          <button type="button" onClick={addCurrentToQueue}>Add to queue</button>
+          <button type="button" onClick={() => setQueueOpen(!queueOpen)}>
+            Queue ({queue.length})
+          </button>
         </div>
       </section>
 
@@ -608,6 +745,7 @@ export function ChapterAudioPlayer({
             ) : null}
           </dl>
           <button type="button" onClick={checkAgain}>Check again</button>
+          {queue.length > 0 ? <button type="button" onClick={playNextQueued}>Skip to next queued chapter</button> : null}
         </section>
       ) : null}
 
@@ -650,12 +788,47 @@ export function ChapterAudioPlayer({
         <div className="chapter-sticky-player" aria-label="Now playing">
           <div>
             <strong>{chapterLabel}</strong>
-            <span>{translation} chapter narration</span>
+            <span>{translation} chapter narration · {formatTime(chapterElapsed)}</span>
           </div>
+          <button type="button" onClick={() => setQueueOpen(true)}>
+            Queue
+          </button>
           <button type="button" onClick={togglePlayback}>
             {status === "playing" ? "Pause" : "Play"}
           </button>
         </div>
+      ) : null}
+
+      {queueOpen ? (
+        <aside className="audio-queue-drawer" aria-label="Listening queue">
+          <div className="audio-queue-header">
+            <div>
+              <span>Up next</span>
+              <h2>Queue</h2>
+            </div>
+            <button type="button" onClick={() => setQueueOpen(false)}>Close</button>
+          </div>
+          {queue.length === 0 ? (
+            <p className="audio-queue-empty">Your queue is empty. Add chapters from this player or any book page.</p>
+          ) : (
+            <div className="audio-queue-list">
+              {queue.map((item, index) => (
+                <article key={item.id} className="audio-queue-item">
+                  <div>
+                    <strong>{item.title}</strong>
+                    <span>{item.translation.toUpperCase()} · #{index + 1}</span>
+                  </div>
+                  <div className="audio-queue-actions">
+                    <button type="button" onClick={() => moveQueueItem(item.id, -1)} disabled={index === 0}>Up</button>
+                    <button type="button" onClick={() => moveQueueItem(item.id, 1)} disabled={index === queue.length - 1}>Down</button>
+                    <button type="button" onClick={() => removeFromQueue(item.id)}>Remove</button>
+                  </div>
+                </article>
+              ))}
+            </div>
+          )}
+          {queue.length > 0 ? <button type="button" className="audio-queue-clear" onClick={clearQueue}>Clear queue</button> : null}
+        </aside>
       ) : null}
     </main>
   );

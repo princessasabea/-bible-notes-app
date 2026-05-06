@@ -21,6 +21,12 @@ export type ChapterAudioManifest = {
   instructions?: string;
   generatedAt?: string;
   audioParts: ChapterAudioPart[];
+  verses?: Array<{
+    number: number;
+    start?: number;
+    end?: number;
+    estimated?: boolean;
+  }>;
 };
 
 export type ChapterAudioLoadResult = {
@@ -122,7 +128,11 @@ export async function loadChapterAudioManifest(
       const raw = await fs.readFile(manifestPath, "utf8");
       const parsed: unknown = JSON.parse(raw);
       const parsedObject = isObject(parsed) ? parsed : {};
-      const parsedParts = Array.isArray(parsedObject.audioParts) ? parsedObject.audioParts : [];
+      const parsedParts = Array.isArray(parsedObject.audioParts)
+        ? parsedObject.audioParts
+        : Array.isArray(parsedObject.audio)
+          ? parsedObject.audio
+          : [];
       const displayBook = typeof parsedObject.book === "string" ? parsedObject.book : toDisplayBook(bookSlug);
       const manifestTranslation = typeof parsedObject.translation === "string"
         ? slugifyAudioPath(parsedObject.translation)
@@ -157,7 +167,8 @@ export async function loadChapterAudioManifest(
           speed: typeof parsedObject.speed === "number" ? parsedObject.speed : undefined,
           instructions: typeof parsedObject.instructions === "string" ? parsedObject.instructions : undefined,
           generatedAt: typeof parsedObject.generatedAt === "string" ? parsedObject.generatedAt : undefined,
-          audioParts
+          audioParts,
+          verses: Array.isArray(parsedObject.verses) ? parsedObject.verses as ChapterAudioManifest["verses"] : []
         },
         attemptedPath: manifestPath,
         missingFiles,

@@ -1,5 +1,6 @@
 "use client";
 
+import { BibleAudioProvider } from "@/components/bible-audio-store";
 import { MiniPlayer } from "@/components/mini-player";
 import { QueueProvider } from "@/components/queue-context";
 import { usePathname } from "next/navigation";
@@ -9,7 +10,7 @@ export function AppShellClient({ children }: { children: React.ReactNode }): Rea
   const isAudioExperience = pathname.startsWith("/audio");
 
   if (isAudioExperience) {
-    return <>{children}</>;
+    return <BibleAudioProvider>{children}</BibleAudioProvider>;
   }
 
   return (

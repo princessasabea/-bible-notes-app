@@ -308,6 +308,39 @@ Open a chapter directly:
 
 - `http://localhost:3000/audio/john/3?translation=amp`
 
+The audio pages use a separate localStorage-backed listening store for:
+
+- current chapter
+- queue
+- playlists
+- playback speed
+- last listening progress
+
+This is intentionally separate from the older reader mini-player. The queue can contain repeated chapters and chapters from different books. Playlists are local for now and can later move to the database without changing the stored chapter reference shape:
+
+```json
+{
+  "name": "Peace Before Sleep",
+  "items": [
+    { "translation": "amp", "book": "psalms", "chapter": 23 },
+    { "translation": "amp", "book": "john", "chapter": 14 }
+  ]
+}
+```
+
+Generated manifests include a `verses` array for future exact timestamps. It is empty until the generation pipeline can produce reliable verse timing:
+
+```json
+{
+  "translation": "amp",
+  "book": "John",
+  "chapter": 3,
+  "audio": [],
+  "audioParts": [],
+  "verses": []
+}
+```
+
 If you previously generated audio before narration cleanup was fixed, regenerate and re-upload the affected book so square-bracket cross references are removed from the spoken audio:
 
 - `npm run audio:book -- --translation amp --book John --source api --force`
