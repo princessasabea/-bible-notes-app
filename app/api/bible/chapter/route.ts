@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
+import { htmlToReadableChapterText } from "@/lib/bible/chapter-text";
 import { assertSameOrigin, sanitizeText } from "@/lib/security";
 
 const BIBLE_IDS: Record<string, string | undefined> = {
@@ -85,10 +86,6 @@ const schema = z.object({
   translation: z.string().min(1).transform((value) => sanitizeText(value).toUpperCase()).default("AMP")
 });
 
-function stripHtml(input: string): string {
-  return input.replace(/<[^>]*>?/gm, "").replace(/\s+/g, " ").trim();
-}
-
 export async function POST(request: Request): Promise<Response> {
   try {
     assertSameOrigin(request);
@@ -154,7 +151,7 @@ export async function POST(request: Request): Promise<Response> {
 
     const data = await response.json();
     const rawHtml = data?.data?.content ?? "";
-    const text = stripHtml(rawHtml);
+    const text = htmlToReadableChapterText(rawHtml);
 
     return NextResponse.json({
       status: "resolved",

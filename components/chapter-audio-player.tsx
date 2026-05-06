@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { BIBLE_BOOKS } from "@/lib/bible/books";
+import { splitChapterTextIntoVerses } from "@/lib/bible/chapter-text";
 import type { ChapterAudioManifest } from "@/lib/audio/chapter-audio";
 import { loadFirebaseAudioLibrary, loadFirebaseChapterAudioManifest } from "@/lib/audio/firebase-chapter-audio";
 import { buildChapterManifestPath } from "@/lib/audio/storage-paths";
@@ -19,11 +20,6 @@ type Props = {
 
 type PlayerStatus = "idle" | "loading" | "ready" | "playing" | "paused" | "ended" | "error";
 type ScriptureStatus = "idle" | "loading" | "ready" | "error";
-
-type ScriptureVerse = {
-  number: string;
-  text: string;
-};
 
 const TRANSLATIONS = ["AMP", "AMPC", "NKJV", "KJV", "ESV"] as const;
 const PLAYBACK_SPEEDS = [0.85, 0.9, 1, 1.1, 1.2] as const;
@@ -54,25 +50,6 @@ function sumDurations(durations: number[], endIndex: number): number {
   return durations
     .slice(0, endIndex)
     .reduce((total, duration) => total + (Number.isFinite(duration) ? duration : 0), 0);
-}
-
-function splitScriptureVerses(text: string): ScriptureVerse[] {
-  const normalized = text.replace(/\s+/g, " ").trim();
-  if (!normalized) {
-    return [];
-  }
-
-  const matches = [...normalized.matchAll(/\b(\d{1,3})\s+([\s\S]*?)(?=\s+\d{1,3}\s+|$)/g)];
-  if (matches.length === 0) {
-    return [{ number: "1", text: normalized }];
-  }
-
-  return matches
-    .map((match, index) => ({
-      number: match[1] || String(index + 1),
-      text: match[2].trim()
-    }))
-    .filter((verse) => verse.text.length > 0);
 }
 
 export function ChapterAudioPlayer({
@@ -122,7 +99,7 @@ export function ChapterAudioPlayer({
   const generationCommand = `npm run audio:chapter -- --translation ${requestedTranslation.toLowerCase()} --book ${activeBook} --chapter ${activeChapter} --input local-chapters/${requestedTranslation.toLowerCase()}/${slugify(activeBook)}/${activeChapter}.txt`;
   const uploadCommand = `npm run audio:upload -- --translation ${requestedTranslation.toLowerCase()} --book ${activeBook} --chapter ${activeChapter} --service-account ./serviceAccountKey.json`;
   const progressKey = `chapter-audio:${requestedTranslation.toLowerCase()}:${slugify(activeBook)}:${activeChapter}`;
-  const scriptureVerses = useMemo(() => splitScriptureVerses(scriptureText), [scriptureText]);
+  const scriptureVerses = useMemo(() => splitChapterTextIntoVerses(scriptureText), [scriptureText]);
   const selectedBookMeta = useMemo(
     () => BIBLE_BOOKS.find((book) => book.name === selectedBook) ?? BIBLE_BOOKS.find((book) => book.name === activeBook) ?? BIBLE_BOOKS[0],
     [activeBook, selectedBook]

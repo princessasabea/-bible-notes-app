@@ -2883,12 +2883,15 @@ button:active,
 
 .scripture-listen-verse {
   margin: 0;
-  padding: 0.82rem 0;
+  padding: 1.05rem 0;
   border-bottom: 1px solid rgba(222, 205, 179, 0.55);
   font-family: Georgia, "Times New Roman", serif;
   font-size: clamp(1.14rem, 2vw, 1.32rem);
   line-height: 1.95;
   color: #2f251c;
+  display: grid;
+  grid-template-columns: 2.2rem minmax(0, 1fr);
+  gap: 0.6rem;
 }
 
 .scripture-listen-verse:last-child {
@@ -2897,9 +2900,10 @@ button:active,
 
 .scripture-listen-verse span {
   display: inline-flex;
-  min-width: 1.7rem;
-  margin-right: 0.45rem;
-  transform: translateY(-0.25em);
+  justify-content: flex-end;
+  min-width: 0;
+  margin-right: 0;
+  transform: translateY(0.38em);
   color: #9b8163;
   font-family: var(--font-sans, Arial, sans-serif);
   font-size: 0.72rem;
