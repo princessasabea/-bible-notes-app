@@ -58,8 +58,8 @@ const BIBLE_BOOK_PATTERN = [
   "Philem(?:on)?",
   "Heb(?:rews)?",
   "James",
-  "1\\s*Pet(?:er)?",
-  "2\\s*Pet(?:er)?",
+  "1\\s*Pet(?:e|er)?",
+  "2\\s*Pet(?:e|er)?",
   "1\\s*John",
   "2\\s*John",
   "3\\s*John",
@@ -67,8 +67,14 @@ const BIBLE_BOOK_PATTERN = [
   "Rev(?:elation)?"
 ].join("|");
 
+const SINGLE_BIBLE_REFERENCE_PATTERN =
+  `(?:${BIBLE_BOOK_PATTERN})\\.?\\s+\\d{1,3}:\\d{1,3}(?:[-–]\\d{1,3})?`;
+
+const SHORTHAND_BIBLE_REFERENCE_PATTERN =
+  `(?:\\d{1,3}:)?\\d{1,3}(?:[-–]\\d{1,3})?`;
+
 const BIBLE_REFERENCE_CONTENT_PATTERN =
-  `(?:see\\s+|cf\\.\\s*)?(?:${BIBLE_BOOK_PATTERN})\\.?\\s+\\d{1,3}:\\d{1,3}(?:[-–]\\d{1,3})?(?:\\s*[,;]\\s*(?:\\d{1,3}:)?\\d{1,3}(?:[-–]\\d{1,3})?)*`;
+  `(?:see\\s+|cf\\.\\s*)?${SINGLE_BIBLE_REFERENCE_PATTERN}(?:\\s*[,;]\\s*(?:${SINGLE_BIBLE_REFERENCE_PATTERN}|${SHORTHAND_BIBLE_REFERENCE_PATTERN}))*`;
 
 const BIBLE_REFERENCE_CONTENT_REGEX = new RegExp(`^\\s*${BIBLE_REFERENCE_CONTENT_PATTERN}\\s*$`, "i");
 const BIBLE_REFERENCE_PARENTHESES_REGEX = new RegExp(`\\(\\s*${BIBLE_REFERENCE_CONTENT_PATTERN}\\s*\\)`, "gi");

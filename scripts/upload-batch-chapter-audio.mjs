@@ -6,15 +6,15 @@ import { spawn } from "node:child_process";
 
 const DEFAULT_TRANSLATION = "amp";
 const DEFAULT_GENERATED_ROOT = "generated-audio";
-const DEFAULT_BOOKS = ["John", "Romans", "Ephesians", "Philippians", "James"];
+const DEFAULT_BOOKS = ["Philippians", "James", "1 John", "Colossians", "Ephesians"];
 
 const usage = `
 Usage:
-  npm run audio:upload:batch -- --translation amp --books John,Romans,Ephesians,Philippians,James --service-account ./serviceAccountKey.json
+  npm run audio:upload:batch -- --translation amp --books Philippians,James,"1 John",Colossians,Ephesians --service-account ./serviceAccountKey.json
 
 Options:
   --translation amp              Translation folder/name. Default: amp
-  --books John,Romans            Comma-separated books. Default: John,Romans,Ephesians,Philippians,James
+  --books John,Romans            Comma-separated books. Default: Philippians,James,1 John,Colossians,Ephesians
   --in generated-audio           Generated audio root. Default: generated-audio
   --bucket bucket.appspot.com    Firebase Storage bucket. Defaults to env.
   --service-account path.json    Service account JSON file. Optional.

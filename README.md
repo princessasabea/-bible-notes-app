@@ -226,6 +226,10 @@ Preview the full John generation plan without fetching Bible text or calling Ope
 
 - `npm run audio:book -- --translation amp --book John --source api --dry-run`
 
+Preview cleaned narration text without spending OpenAI credits:
+
+- `npm run audio:preview -- --translation amp --book John --chapter 3 --source api`
+
 Generate all 21 chapters of John:
 
 - `npm run audio:book -- --translation amp --book John --source api`
@@ -355,6 +359,12 @@ The same full-book API workflow supports these AMP books:
 - Proverbs
 - Philippians
 - James
+- 1 John
+- Colossians
+- Ruth
+- 1 Peter
+- Ecclesiastes
+- Esther
 
 Generate one full book:
 
@@ -363,6 +373,13 @@ Generate one full book:
 - `npm run audio:book -- --translation amp --book Proverbs --source api`
 - `npm run audio:book -- --translation amp --book Philippians --source api`
 - `npm run audio:book -- --translation amp --book James --source api`
+- `npm run audio:book -- --translation amp --book "1 John" --source api`
+- `npm run audio:book -- --translation amp --book Colossians --source api`
+- `npm run audio:book -- --translation amp --book Ephesians --source api`
+- `npm run audio:book -- --translation amp --book Ruth --source api`
+- `npm run audio:book -- --translation amp --book "1 Peter" --source api`
+- `npm run audio:book -- --translation amp --book Ecclesiastes --source api`
+- `npm run audio:book -- --translation amp --book Esther --source api`
 
 Upload one full book:
 
@@ -371,6 +388,39 @@ Upload one full book:
 - `npm run audio:upload:book -- --translation amp --book Proverbs --service-account ./serviceAccountKey.json`
 - `npm run audio:upload:book -- --translation amp --book Philippians --service-account ./serviceAccountKey.json`
 - `npm run audio:upload:book -- --translation amp --book James --service-account ./serviceAccountKey.json`
+- `npm run audio:upload:book -- --translation amp --book "1 John" --service-account ./serviceAccountKey.json`
+- `npm run audio:upload:book -- --translation amp --book Colossians --service-account ./serviceAccountKey.json`
+- `npm run audio:upload:book -- --translation amp --book Ephesians --service-account ./serviceAccountKey.json`
+- `npm run audio:upload:book -- --translation amp --book Ruth --service-account ./serviceAccountKey.json`
+- `npm run audio:upload:book -- --translation amp --book "1 Peter" --service-account ./serviceAccountKey.json`
+- `npm run audio:upload:book -- --translation amp --book Ecclesiastes --service-account ./serviceAccountKey.json`
+- `npm run audio:upload:book -- --translation amp --book Esther --service-account ./serviceAccountKey.json`
+
+## Recommended low-cost test books
+
+Use short books while refining narration cleanup and UI behavior. They cost less and finish faster than Psalms or other large books:
+
+- Philippians
+- James
+- 1 John
+- Colossians
+- Ephesians
+- Ruth
+- 1 Peter
+- Ecclesiastes
+- Esther
+
+Preview cleanup first:
+
+- `npm run audio:preview -- --translation amp --book Philippians --chapter 1 --source api`
+- `npm run audio:preview -- --translation amp --book "1 John" --chapter 1 --source api`
+
+Then generate and upload only after the preview text is clean:
+
+- `npm run audio:book -- --translation amp --book Philippians --source api`
+- `npm run audio:upload:book -- --translation amp --book Philippians --service-account ./serviceAccountKey.json`
+
+Do not generate Psalms or other large books during cleanup testing unless you explicitly mean to spend that time and OpenAI budget.
 
 Generate the whole pack in one command:
 

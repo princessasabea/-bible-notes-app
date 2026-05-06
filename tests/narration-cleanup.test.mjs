@@ -41,4 +41,20 @@ describe("cleanBibleTextForNarration", () => {
       "We know, in accordance with His purpose, that God works all things together."
     );
   });
+
+  it("removes Bible references in brackets and parentheses without removing AMP explanations", () => {
+    const input = "1 In the beginning [Gen 1:3] was the Word, and Nicodemus was a ruler (member of the Sanhedrin) among the Jews. (Mark 8:9)";
+
+    expect(cleanBibleTextForNarration(input, "amp")).toBe(
+      "In the beginning was the Word, and Nicodemus was a ruler, member of the Sanhedrin, among the Jews."
+    );
+  });
+
+  it("removes ranges and multi-book bracket cross references", () => {
+    const input = "3 Jesus answered [John 3:3-5], and God works all things [Rom 8:28; Eph 1:11] according to His purpose [reborn from above].";
+
+    expect(cleanBibleTextForNarration(input, "amp")).toBe(
+      "Jesus answered, and God works all things according to His purpose, reborn from above."
+    );
+  });
 });

@@ -5,6 +5,7 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
+    "audio:preview": "node scripts/preview-narration-text.mjs",
     "audio:chapter": "node scripts/generate-chapter-audio.mjs",
     "audio:book": "node scripts/generate-book-audio.mjs",
     "audio:books": "node scripts/generate-books-audio.mjs",

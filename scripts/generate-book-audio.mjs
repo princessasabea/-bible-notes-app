@@ -15,9 +15,16 @@ const BOOKS = {
   romans: { name: "Romans", code: "ROM", chapters: 16 },
   psalms: { name: "Psalms", code: "PSA", chapters: 150 },
   proverbs: { name: "Proverbs", code: "PRO", chapters: 31 },
+  ruth: { name: "Ruth", code: "RUT", chapters: 4 },
+  ecclesiastes: { name: "Ecclesiastes", code: "ECC", chapters: 12 },
+  esther: { name: "Esther", code: "EST", chapters: 10 },
   ephesians: { name: "Ephesians", code: "EPH", chapters: 6 },
   philippians: { name: "Philippians", code: "PHP", chapters: 4 },
-  james: { name: "James", code: "JAS", chapters: 5 }
+  colossians: { name: "Colossians", code: "COL", chapters: 4 },
+  james: { name: "James", code: "JAS", chapters: 5 },
+  "1-john": { name: "1 John", code: "1JN", chapters: 5 },
+  "1-pete": { name: "1 Peter", code: "1PE", chapters: 5 },
+  "1-peter": { name: "1 Peter", code: "1PE", chapters: 5 }
 };
 
 const DEFAULT_BIBLE_IDS = {

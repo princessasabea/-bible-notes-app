@@ -7,15 +7,15 @@ import { spawn } from "node:child_process";
 const DEFAULT_TRANSLATION = "amp";
 const DEFAULT_SOURCE_ROOT = "local-chapters";
 const DEFAULT_OUTPUT_ROOT = "generated-audio";
-const DEFAULT_BOOKS = ["John", "Romans", "Ephesians", "Philippians", "James"];
+const DEFAULT_BOOKS = ["Philippians", "James", "1 John", "Colossians", "Ephesians"];
 
 const usage = `
 Usage:
-  npm run audio:batch -- --translation amp --books John,Romans,Ephesians,Philippians,James
+  npm run audio:batch -- --translation amp --books Philippians,James,"1 John",Colossians,Ephesians
 
 Options:
   --translation amp       Translation folder/name. Default: amp
-  --books John,Romans     Comma-separated books. Default: John,Romans,Ephesians,Philippians,James
+  --books John,Romans     Comma-separated books. Default: Philippians,James,1 John,Colossians,Ephesians
   --source local-chapters Source text root. Default: local-chapters
   --out generated-audio   Output audio root. Default: generated-audio
   --force                 Regenerate chapters that already have manifest.json and audio segments

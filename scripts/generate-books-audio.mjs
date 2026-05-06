@@ -3,17 +3,17 @@
 import { spawn } from "node:child_process";
 
 const DEFAULT_TRANSLATION = "amp";
-const DEFAULT_BOOKS = ["Romans", "Psalms", "Proverbs", "Philippians", "James"];
+const DEFAULT_BOOKS = ["Philippians", "James", "1 John", "Colossians", "Ephesians"];
 const DEFAULT_SOURCE = "api";
 const DEFAULT_OUTPUT_ROOT = "generated-audio";
 
 const usage = `
 Usage:
-  npm run audio:books -- --translation amp --books Romans,Psalms,Proverbs,Philippians,James --source api
+  npm run audio:books -- --translation amp --books Philippians,James,"1 John",Colossians,Ephesians --source api
 
 Options:
   --translation amp       Translation folder/name. Default: amp
-  --books Romans,James    Comma-separated books. Default: Romans,Psalms,Proverbs,Philippians,James
+  --books Romans,James    Comma-separated books. Default: Philippians,James,1 John,Colossians,Ephesians
   --source api            Source for chapter text. Default: api
   --out generated-audio   Output audio root. Default: generated-audio
   --concurrency 1         Chapters to generate at once inside each book. Default: 1
